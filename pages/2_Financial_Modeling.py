@@ -7,42 +7,124 @@ from core.utils import styled_card # Import styled_card
 
 st.set_page_config(page_title="Financial Modeling", layout="wide")
 
+# --- Default Values Constants ---
+DEFAULT_REVENUE_Y1 = 100000
+DEFAULT_REVENUE_GROWTH_Y2 = 0.20
+DEFAULT_REVENUE_GROWTH_Y3 = 0.15
+DEFAULT_COGS_PERCENT = 0.40
+DEFAULT_OPEX_Y1 = 30000
+DEFAULT_OPEX_GROWTH_Y2 = 0.10
+DEFAULT_OPEX_GROWTH_Y3 = 0.05
+DEFAULT_TAX_RATE = 0.21
+DEFAULT_INTEREST_EXPENSE = 1000
+DEFAULT_DEPRECIATION_AMORTIZATION = 5000
+DEFAULT_CHANGE_IN_WORKING_CAPITAL = 2000
+DEFAULT_CAPITAL_EXPENDITURES = 10000
+DEFAULT_DEBT_RAISED_REPAID = 0
+DEFAULT_EQUITY_ISSUED_REPURCHASED = 0
+DEFAULT_INITIAL_CASH_BALANCE = 50000
+DEFAULT_INITIAL_ACCOUNTS_RECEIVABLE = 15000
+DEFAULT_INITIAL_INVENTORY = 10000
+DEFAULT_INITIAL_ACCOUNTS_PAYABLE = 8000
+DEFAULT_INITIAL_PPE = 75000
+DEFAULT_INITIAL_ACCUMULATED_DEPRECIATION = 10000
+DEFAULT_INITIAL_LONG_TERM_DEBT = 20000
+DEFAULT_INITIAL_EQUITY = 112000 # Derived: Assets(50+15+10+(75-10)=140) - Liab(8+20=28) = 112
+
+# Map for percentage inputs: main fm_inputs key to widget key prefix
+PERCENTAGE_KEYS_INFO = {
+    "revenue_growth_y2": "fm_revenue_growth_y2",
+    "revenue_growth_y3": "fm_revenue_growth_y3",
+    "cogs_percent": "fm_cogs_percent",
+    "opex_growth_y2": "fm_opex_growth_y2",
+    "opex_growth_y3": "fm_opex_growth_y3",
+    "tax_rate": "fm_tax_rate"
+}
+
+# --- Callback functions for synchronized percentage inputs (will be used outside the form) ---
+def create_sync_callbacks(main_input_key_in_fm_inputs, widget_key_prefix):
+    """Helper to create a pair of sync callback functions."""
+    slider_display_key = f"{widget_key_prefix}_slider_display"
+    text_display_key = f"{widget_key_prefix}_text_display"
+
+    def _sync_from_slider():
+        # Update main fm_inputs key (0.0-1.0)
+        st.session_state.fm_inputs[main_input_key_in_fm_inputs] = st.session_state[slider_display_key] / 100.0
+        # Update the text display key to match slider
+        st.session_state[text_display_key] = st.session_state[slider_display_key]
+
+    def _sync_from_text():
+        # Update main fm_inputs key (0.0-1.0)
+        st.session_state.fm_inputs[main_input_key_in_fm_inputs] = st.session_state[text_display_key] / 100.0
+        # Update the slider display key to match text
+        st.session_state[slider_display_key] = st.session_state[text_display_key]
+    
+    return _sync_from_slider, _sync_from_text
+
+# Create callbacks for each percentage input
+# These will be assigned to widgets outside the form
+sync_rev_g2_slider, sync_rev_g2_text = create_sync_callbacks("revenue_growth_y2", PERCENTAGE_KEYS_INFO["revenue_growth_y2"])
+sync_rev_g3_slider, sync_rev_g3_text = create_sync_callbacks("revenue_growth_y3", PERCENTAGE_KEYS_INFO["revenue_growth_y3"])
+sync_cogs_slider, sync_cogs_text = create_sync_callbacks("cogs_percent", PERCENTAGE_KEYS_INFO["cogs_percent"])
+sync_opex_g2_slider, sync_opex_g2_text = create_sync_callbacks("opex_growth_y2", PERCENTAGE_KEYS_INFO["opex_growth_y2"])
+sync_opex_g3_slider, sync_opex_g3_text = create_sync_callbacks("opex_growth_y3", PERCENTAGE_KEYS_INFO["opex_growth_y3"])
+sync_tax_slider, sync_tax_text = create_sync_callbacks("tax_rate", PERCENTAGE_KEYS_INFO["tax_rate"])
+
+
 def initialize_page_session_state():
     """Initializes session state keys specific to the Financial Modeling page."""
     if 'fm_inputs' not in st.session_state:
         # Initialize with default values or ensure they are set before use
         st.session_state.fm_inputs = {
-            "revenue_y1": 100000, "revenue_growth_y2": 0.20, "revenue_growth_y3": 0.15,
-            "cogs_percent": 0.40,
-            "opex_y1": 30000, "opex_growth_y2": 0.10, "opex_growth_y3": 0.05,
-            "tax_rate": 0.21,
-            "interest_expense": 1000,
-            "depreciation_amortization": 5000,
-            "change_in_working_capital": 2000,
-            "capital_expenditures": 10000,
-            "debt_raised_repaid": 0,
-            "equity_issued_repurchased": 0,
-            "initial_cash_balance": 50000,
-            "initial_accounts_receivable": 15000,
-            "initial_inventory": 10000,
-            "initial_accounts_payable": 8000,
-            "initial_ppe": 75000,
-            "initial_accumulated_depreciation": 10000,
-            "initial_long_term_debt": 20000,
-            # Corrected initial equity calculation for BS to balance
-            # Assets(50+15+10+(75-10)=140) - Liab(8+20=28) = 112
-            "initial_equity": 112000
+            "revenue_y1": DEFAULT_REVENUE_Y1, "revenue_growth_y2": DEFAULT_REVENUE_GROWTH_Y2, "revenue_growth_y3": DEFAULT_REVENUE_GROWTH_Y3,
+            "cogs_percent": DEFAULT_COGS_PERCENT,
+            "opex_y1": DEFAULT_OPEX_Y1, "opex_growth_y2": DEFAULT_OPEX_GROWTH_Y2, "opex_growth_y3": DEFAULT_OPEX_GROWTH_Y3,
+            "tax_rate": DEFAULT_TAX_RATE,
+            "interest_expense": DEFAULT_INTEREST_EXPENSE,
+            "depreciation_amortization": DEFAULT_DEPRECIATION_AMORTIZATION,
+            "change_in_working_capital": DEFAULT_CHANGE_IN_WORKING_CAPITAL,
+            "capital_expenditures": DEFAULT_CAPITAL_EXPENDITURES,
+            "debt_raised_repaid": DEFAULT_DEBT_RAISED_REPAID,
+            "equity_issued_repurchased": DEFAULT_EQUITY_ISSUED_REPURCHASED,
+            "initial_cash_balance": DEFAULT_INITIAL_CASH_BALANCE,
+            "initial_accounts_receivable": DEFAULT_INITIAL_ACCOUNTS_RECEIVABLE,
+            "initial_inventory": DEFAULT_INITIAL_INVENTORY,
+            "initial_accounts_payable": DEFAULT_INITIAL_ACCOUNTS_PAYABLE,
+            "initial_ppe": DEFAULT_INITIAL_PPE,
+            "initial_accumulated_depreciation": DEFAULT_INITIAL_ACCUMULATED_DEPRECIATION,
+            "initial_long_term_debt": DEFAULT_INITIAL_LONG_TERM_DEBT,
+            "initial_equity": DEFAULT_INITIAL_EQUITY
         }
+    # Initialize display-specific keys for percentage inputs (0-100 range)
+    for main_key, widget_key_prefix in PERCENTAGE_KEYS_INFO.items():
+        slider_display_key = f"{widget_key_prefix}_slider_display"
+        text_display_key = f"{widget_key_prefix}_text_display"
+        if slider_display_key not in st.session_state:
+            st.session_state[slider_display_key] = st.session_state.fm_inputs[main_key] * 100
+        if text_display_key not in st.session_state:
+            st.session_state[text_display_key] = st.session_state.fm_inputs[main_key] * 100
+            
     if 'fm_financial_statements' not in st.session_state:
         st.session_state.fm_financial_statements = None
     if 'fm_scenario_revenue_sensitivity' not in st.session_state:
-        st.session_state.fm_scenario_revenue_sensitivity = 0.0
+        st.session_state.fm_scenario_revenue_sensitivity = 0 # Changed to integer 0
 
 
 initialize_page_session_state()
 
 st.title("Financial Modeling Agent 💰")
 st.markdown("Input your key assumptions to generate basic 3-year financial projections. Configure AI provider in the sidebar if LLM guidance features are used.")
+
+# --- Sidebar Elements ---
+# Scenario Analysis Slider (always visible)
+st.sidebar.subheader("Scenario Analysis")
+st.session_state.fm_scenario_revenue_sensitivity = st.sidebar.slider(
+    "Revenue Sensitivity (+/- %)", 
+    min_value=-50, max_value=50,
+    value=st.session_state.fm_scenario_revenue_sensitivity, 
+    step=1, format="%d%%",
+    key="fm_rev_sensitivity_slider"
+)
 
 # --- INPUTS WIZARD ---
 st.subheader("Key Assumptions (3-Year Projection)")
@@ -70,56 +152,158 @@ if 'global_startup_profile' in st.session_state and st.session_state.global_star
             # Heuristic: If revenue_y1 is still at its default and funding is available,
             # set revenue_y1 to a multiple of funding (e.g., 2x funding as a starting point)
             # This is a placeholder heuristic and should be refined based on typical startup scenarios.
-            if st.session_state.fm_inputs.get("revenue_y1") == 100000: # Default value check
+            if st.session_state.fm_inputs.get("revenue_y1") == DEFAULT_REVENUE_Y1: # Check against constant
                  st.session_state.fm_inputs["revenue_y1"] = int(parsed_funding * 0.5) # Example: Y1 revenue is 50% of funding needed
                  st.info(f"Pre-filled Year 1 Revenue based on funding needed ({profile['funding_needed']}). Please review and adjust.")
         except ValueError:
             pass # Could not parse funding_needed, skip pre-fill for revenue
 
-# Use a form for inputs to prevent reruns on each widget change until submission
+# --- Interactive Percentage Inputs (Outside Form) ---
+st.subheader("Growth Rates & Percentages")
+interactive_cols = st.columns(3)
+
+with interactive_cols[0]: # Revenue Growth Rates
+    st.write("Year 2 Revenue Growth")
+    rev_g2_cols = st.columns([3, 1])
+    with rev_g2_cols[0]:
+        st.slider("Year 2 Revenue Growth Slider", min_value=0.0, max_value=100.0, step=1.0, format="%.0f%%", 
+                  key=f"{PERCENTAGE_KEYS_INFO['revenue_growth_y2']}_slider_display", 
+                  on_change=sync_rev_g2_slider,
+                  help="Expected year-over-year revenue growth rate for Year 2 (0-100%).", label_visibility="collapsed")
+    with rev_g2_cols[1]:
+        st.number_input("Y2 Rev Growth Text", min_value=0.0, max_value=100.0, step=0.1, format="%.1f",
+                        key=f"{PERCENTAGE_KEYS_INFO['revenue_growth_y2']}_text_display", 
+                        on_change=sync_rev_g2_text,
+                        label_visibility="collapsed")
+
+    st.write("Year 3 Revenue Growth")
+    rev_g3_cols = st.columns([3, 1])
+    with rev_g3_cols[0]:
+        st.slider("Year 3 Revenue Growth Slider", min_value=0.0, max_value=100.0, step=1.0, format="%.0f%%",
+                  key=f"{PERCENTAGE_KEYS_INFO['revenue_growth_y3']}_slider_display", 
+                  on_change=sync_rev_g3_slider,
+                  help="Expected year-over-year revenue growth rate for Year 3 (0-100%).", label_visibility="collapsed")
+    with rev_g3_cols[1]:
+        st.number_input("Y3 Rev Growth Text", min_value=0.0, max_value=100.0, step=0.1, format="%.1f",
+                        key=f"{PERCENTAGE_KEYS_INFO['revenue_growth_y3']}_text_display", 
+                        on_change=sync_rev_g3_text,
+                        label_visibility="collapsed")
+
+with interactive_cols[1]: # Costs & Expenses Percentages
+    st.write("COGS (% of Revenue)")
+    cogs_cols = st.columns([3,1])
+    with cogs_cols[0]:
+        st.slider("COGS Slider", min_value=0.0, max_value=100.0, step=1.0, format="%.0f%%",
+                  key=f"{PERCENTAGE_KEYS_INFO['cogs_percent']}_slider_display", 
+                  on_change=sync_cogs_slider,
+                  help="Cost of Goods Sold as a percentage of total revenue.", label_visibility="collapsed")
+    with cogs_cols[1]:
+        st.number_input("COGS Text", min_value=0.0, max_value=100.0, step=0.1, format="%.1f",
+                        key=f"{PERCENTAGE_KEYS_INFO['cogs_percent']}_text_display", 
+                        on_change=sync_cogs_text,
+                        label_visibility="collapsed")
+
+    st.write("Year 2 OpEx Growth")
+    opex_g2_cols = st.columns([3,1])
+    with opex_g2_cols[0]:
+        st.slider("Year 2 OpEx Growth Slider", min_value=0.0, max_value=100.0, step=1.0, format="%.0f%%",
+                  key=f"{PERCENTAGE_KEYS_INFO['opex_growth_y2']}_slider_display", 
+                  on_change=sync_opex_g2_slider,
+                  help="Expected growth rate for operating expenses in Year 2 (0-100%).", label_visibility="collapsed")
+    with opex_g2_cols[1]:
+        st.number_input("Y2 OpEx Growth Text", min_value=0.0, max_value=100.0, step=0.1, format="%.1f",
+                        key=f"{PERCENTAGE_KEYS_INFO['opex_growth_y2']}_text_display", 
+                        on_change=sync_opex_g2_text,
+                        label_visibility="collapsed")
+
+    st.write("Year 3 OpEx Growth")
+    opex_g3_cols = st.columns([3,1])
+    with opex_g3_cols[0]:
+        st.slider("Year 3 OpEx Growth Slider", min_value=0.0, max_value=100.0, step=1.0, format="%.0f%%",
+                  key=f"{PERCENTAGE_KEYS_INFO['opex_growth_y3']}_slider_display", 
+                  on_change=sync_opex_g3_slider,
+                  help="Expected growth rate for operating expenses in Year 3 (0-100%).", label_visibility="collapsed")
+    with opex_g3_cols[1]:
+        st.number_input("Y3 OpEx Growth Text", min_value=0.0, max_value=100.0, step=0.1, format="%.1f",
+                        key=f"{PERCENTAGE_KEYS_INFO['opex_growth_y3']}_text_display", 
+                        on_change=sync_opex_g3_text,
+                        label_visibility="collapsed")
+
+with interactive_cols[2]: # Other Percentages
+    st.write("Tax Rate")
+    tax_cols = st.columns([3,1])
+    with tax_cols[0]:
+        st.slider("Tax Rate Slider", min_value=0.0, max_value=100.0, step=1.0, format="%.0f%%",
+                  key=f"{PERCENTAGE_KEYS_INFO['tax_rate']}_slider_display", 
+                  on_change=sync_tax_slider,
+                  help="Effective corporate tax rate on profits (0-100%).", label_visibility="collapsed")
+    with tax_cols[1]:
+        st.number_input("Tax Rate Text", min_value=0.0, max_value=100.0, step=0.1, format="%.1f",
+                        key=f"{PERCENTAGE_KEYS_INFO['tax_rate']}_text_display", 
+                        on_change=sync_tax_text,
+                        label_visibility="collapsed")
+
+st.divider() # Separator before the form
+
+# Use a form for remaining inputs to prevent reruns on each widget change until submission
 with st.form(key="financial_assumptions_form"):
-
+    st.subheader("Core Financial Values & Other Assumptions") # Changed subheader
     # Group inputs for better layout
-    input_cols = st.columns(3)
-    with input_cols[0]:
-        st.subheader("Revenue")
-        st.session_state.fm_inputs["revenue_y1"] = st.number_input("Year 1 Revenue ($)", min_value=0, value=st.session_state.fm_inputs.get("revenue_y1", 100000), step=1000, key="fm_rev_y1", help="Projected total revenue for the first full year of operation.")
-        st.session_state.fm_inputs["revenue_growth_y2"] = st.slider("Year 2 Revenue Growth", min_value=-1.0, max_value=2.0, value=st.session_state.fm_inputs.get("revenue_growth_y2", 0.20), step=0.01, format="%.0f%%", key="fm_rev_g2", help="Expected year-over-year revenue growth rate for Year 2.")
-        st.session_state.fm_inputs["revenue_growth_y3"] = st.slider("Year 3 Revenue Growth", min_value=-1.0, max_value=2.0, value=st.session_state.fm_inputs.get("revenue_growth_y3", 0.15), step=0.01, format="%.0f%%", key="fm_rev_g3", help="Expected year-over-year revenue growth rate for Year 3.")
+    form_input_cols = st.columns(3) # Renamed to avoid conflict
+    with form_input_cols[0]: # Was input_cols[0]
+        st.subheader("Revenue") # This subheader might be redundant if one is above for the whole section
+        st.session_state.fm_inputs["revenue_y1"] = st.number_input("Year 1 Revenue ($)", min_value=0, value=st.session_state.fm_inputs.get("revenue_y1", DEFAULT_REVENUE_Y1), step=1000, key="fm_rev_y1_form", help="Projected total revenue for the first full year of operation.")
+        # Percentage inputs for revenue growth are now outside the form
 
-    with input_cols[1]:
-        st.subheader("Costs & Expenses")
-        st.session_state.fm_inputs["cogs_percent"] = st.slider("COGS (% of Revenue)", min_value=0.0, max_value=1.0, value=st.session_state.fm_inputs.get("cogs_percent", 0.40), step=0.01, format="%.0f%%", key="fm_cogs", help="Cost of Goods Sold as a percentage of total revenue.")
-        st.session_state.fm_inputs["opex_y1"] = st.number_input("Year 1 Operating Expenses ($)", min_value=0, value=st.session_state.fm_inputs.get("opex_y1", 30000), step=1000, key="fm_opex_y1", help="Total operating expenses (e.g., salaries, rent, marketing) for Year 1, excluding COGS.")
-        st.session_state.fm_inputs["opex_growth_y2"] = st.slider("Year 2 OpEx Growth", min_value=-1.0, max_value=1.0, value=st.session_state.fm_inputs.get("opex_growth_y2", 0.10), step=0.01, format="%.0f%%", key="fm_opex_g2", help="Expected growth rate for operating expenses in Year 2.")
-        st.session_state.fm_inputs["opex_growth_y3"] = st.slider("Year 3 OpEx Growth", min_value=-1.0, max_value=1.0, value=st.session_state.fm_inputs.get("opex_growth_y3", 0.05), step=0.01, format="%.0f%%", key="fm_opex_g3", help="Expected growth rate for operating expenses in Year 3.")
+    with form_input_cols[1]: # Was input_cols[1]
+        st.subheader("Costs & Expenses") # Redundant?
+        # COGS % is now outside the form
+        st.session_state.fm_inputs["opex_y1"] = st.number_input("Year 1 Operating Expenses ($)", min_value=0, value=st.session_state.fm_inputs.get("opex_y1", DEFAULT_OPEX_Y1), step=1000, key="fm_opex_y1_form", help="Total operating expenses (e.g., salaries, rent, marketing) for Year 1, excluding COGS.")
+        # OpEx growth percentages are now outside the form
 
-    with input_cols[2]:
-        st.subheader("Other Financial Inputs")
-        st.session_state.fm_inputs["tax_rate"] = st.slider("Tax Rate", min_value=0.0, max_value=0.5, value=st.session_state.fm_inputs.get("tax_rate", 0.21), step=0.01, format="%.0f%%", key="fm_tax", help="Effective corporate tax rate on profits.")
-        st.session_state.fm_inputs["interest_expense"] = st.number_input("Annual Interest Expense ($)", min_value=0, value=st.session_state.fm_inputs.get("interest_expense", 1000), step=100, key="fm_interest", help="Projected annual interest paid on debt.")
-        st.session_state.fm_inputs["depreciation_amortization"] = st.number_input("Annual Depreciation & Amortization ($)", min_value=0, value=st.session_state.fm_inputs.get("depreciation_amortization", 5000), step=500, key="fm_da", help="Annual non-cash expense for depreciation of assets and amortization of intangibles.")
+    with form_input_cols[2]: # Was input_cols[2]
+        st.subheader("Other Financial Inputs") # Redundant?
+        # Tax Rate is now outside the form
+        st.session_state.fm_inputs["interest_expense"] = st.number_input("Annual Interest Expense ($)", min_value=0, value=st.session_state.fm_inputs.get("interest_expense", DEFAULT_INTEREST_EXPENSE), step=100, key="fm_interest_form", help="Projected annual interest paid on debt.")
+        st.session_state.fm_inputs["depreciation_amortization"] = st.number_input("Annual Depreciation & Amortization ($)", min_value=0, value=st.session_state.fm_inputs.get("depreciation_amortization", DEFAULT_DEPRECIATION_AMORTIZATION), step=500, key="fm_da_form", help="Annual non-cash expense for depreciation of assets and amortization of intangibles.")
 
     st.divider()
-    st.subheader("Cash Flow & Balance Sheet Assumptions (Annual)")
+    st.subheader("Cash Flow & Balance Sheet Assumptions (Annual)") # This subheader is fine
     cf_bs_cols = st.columns(3)
     with cf_bs_cols[0]:
-        st.session_state.fm_inputs["change_in_working_capital"] = st.number_input("Change in Net Working Capital ($)", value=st.session_state.fm_inputs.get("change_in_working_capital", 2000), step=500, help="Annual change in (Current Assets - Current Liabilities). Positive for increase (cash outflow).", key="fm_nwc")
-        st.session_state.fm_inputs["capital_expenditures"] = st.number_input("Capital Expenditures (CapEx) ($)", min_value=0, value=st.session_state.fm_inputs.get("capital_expenditures", 10000), step=1000, help="Annual investment in long-term assets (e.g., property, plant, equipment). Enter as positive for cash outflow.", key="fm_capex")
+        st.session_state.fm_inputs["change_in_working_capital"] = st.number_input("Change in Net Working Capital ($)", value=st.session_state.fm_inputs.get("change_in_working_capital", DEFAULT_CHANGE_IN_WORKING_CAPITAL), step=500, help="Annual change in (Current Assets - Current Liabilities). Positive for increase (cash outflow).", key="fm_nwc_form")
+        st.session_state.fm_inputs["capital_expenditures"] = st.number_input("Capital Expenditures (CapEx) ($)", min_value=0, value=st.session_state.fm_inputs.get("capital_expenditures", DEFAULT_CAPITAL_EXPENDITURES), step=1000, help="Annual investment in long-term assets (e.g., property, plant, equipment). Enter as positive for cash outflow.", key="fm_capex_form")
     with cf_bs_cols[1]:
-        st.session_state.fm_inputs["debt_raised_repaid"] = st.number_input("Net Debt Raised/(Repaid) ($)", value=st.session_state.fm_inputs.get("debt_raised_repaid", 0), step=1000, help="Net cash from new debt minus debt repayments. Positive for inflow, negative for outflow.", key="fm_debt")
-        st.session_state.fm_inputs["equity_issued_repurchased"] = st.number_input("Net Equity Issued/(Repurchased) ($)", value=st.session_state.fm_inputs.get("equity_issued_repurchased", 0), step=1000, help="Net cash from new equity issued minus equity repurchased. Positive for inflow, negative for outflow.", key="fm_equity_fin")
+        st.session_state.fm_inputs["debt_raised_repaid"] = st.number_input("Net Debt Raised/(Repaid) ($)", value=st.session_state.fm_inputs.get("debt_raised_repaid", DEFAULT_DEBT_RAISED_REPAID), step=1000, help="Net cash from new debt minus debt repayments. Positive for inflow, negative for outflow.", key="fm_debt_form")
+        st.session_state.fm_inputs["equity_issued_repurchased"] = st.number_input("Net Equity Issued/(Repurchased) ($)", value=st.session_state.fm_inputs.get("equity_issued_repurchased", DEFAULT_EQUITY_ISSUED_REPURCHASED), step=1000, help="Net cash from new equity issued minus equity repurchased. Positive for inflow, negative for outflow.", key="fm_equity_fin_form")
     with cf_bs_cols[2]:
         st.subheader("Initial Balance Sheet Values (Year 0)")
-        st.session_state.fm_inputs["initial_cash_balance"] = st.number_input("Cash ($)", min_value=0, value=st.session_state.fm_inputs.get("initial_cash_balance", 50000), key="fm_init_cash", help="Cash balance at the beginning of Year 1 (end of Year 0).")
-        # Add more initial BS items as needed by financial_model_logic.py
-        # For now, the logic file has defaults for AR, Inv, AP, PPE, AccDep, LTD, Equity.
-        # These could be exposed here if more granular control is desired.
+        st.session_state.fm_inputs["initial_cash_balance"] = st.number_input("Cash ($)", min_value=0, value=st.session_state.fm_inputs.get("initial_cash_balance", DEFAULT_INITIAL_CASH_BALANCE), key="fm_init_cash_form", help="Cash balance at the beginning of Year 1 (end of Year 0).")
+        st.session_state.fm_inputs["initial_accounts_receivable"] = st.number_input("Accounts Receivable ($)", min_value=0, value=st.session_state.fm_inputs.get("initial_accounts_receivable", DEFAULT_INITIAL_ACCOUNTS_RECEIVABLE), key="fm_init_ar_form", help="Initial accounts receivable.")
+        st.session_state.fm_inputs["initial_inventory"] = st.number_input("Inventory ($)", min_value=0, value=st.session_state.fm_inputs.get("initial_inventory", DEFAULT_INITIAL_INVENTORY), key="fm_init_inv_form", help="Initial inventory value.")
+        st.session_state.fm_inputs["initial_accounts_payable"] = st.number_input("Accounts Payable ($)", min_value=0, value=st.session_state.fm_inputs.get("initial_accounts_payable", DEFAULT_INITIAL_ACCOUNTS_PAYABLE), key="fm_init_ap_form", help="Initial accounts payable.")
+        st.session_state.fm_inputs["initial_ppe"] = st.number_input("Property, Plant & Equipment (Net PPE) ($)", min_value=0, value=st.session_state.fm_inputs.get("initial_ppe", DEFAULT_INITIAL_PPE), key="fm_init_ppe_form", help="Initial net Property, Plant, and Equipment value.")
+        st.session_state.fm_inputs["initial_accumulated_depreciation"] = st.number_input("Accumulated Depreciation ($)", min_value=0, value=st.session_state.fm_inputs.get("initial_accumulated_depreciation", DEFAULT_INITIAL_ACCUMULATED_DEPRECIATION), key="fm_init_ad_form", help="Initial accumulated depreciation. Note: Net PPE should be Gross PPE - Accumulated Depreciation. This input is for tracking, ensure consistency if Gross PPE is considered elsewhere.")
+        st.session_state.fm_inputs["initial_long_term_debt"] = st.number_input("Long-Term Debt ($)", min_value=0, value=st.session_state.fm_inputs.get("initial_long_term_debt", DEFAULT_INITIAL_LONG_TERM_DEBT), key="fm_init_ltd_form", help="Initial long-term debt.")
+        st.session_state.fm_inputs["initial_equity"] = st.number_input("Total Equity ($)", min_value=0, value=st.session_state.fm_inputs.get("initial_equity", DEFAULT_INITIAL_EQUITY), key="fm_init_equity_form", help="Initial total equity. Ensure A = L + E for Year 0.")
 
     submitted_assumptions = st.form_submit_button("Generate Financial Statements", help="Click to generate P&L, Cash Flow, and Balance Sheet based on your inputs.")
 
 
 if submitted_assumptions:
+    # Update fm_inputs from the text_display fields before calculation
+    # This makes the number input (text_display key) the source of truth for percentages
+    # THIS BLOCK IS NO LONGER NEEDED as callbacks handle fm_inputs updates for percentages.
+    # for main_input_key, widget_key_prefix in PERCENTAGE_KEYS_INFO.items():
+    #     text_display_key = f"{widget_key_prefix}_text_display"
+    #     if text_display_key in st.session_state:
+    #         st.session_state.fm_inputs[main_input_key] = st.session_state[text_display_key] / 100.0
+    #     # Also, ensure the slider display value is consistent with the text input after submission for next render
+    #     slider_display_key = f"{widget_key_prefix}_slider_display"
+    #     if text_display_key in st.session_state and slider_display_key in st.session_state:
+    #          st.session_state[slider_display_key] = st.session_state[text_display_key]
+
+
     with st.spinner("Generating financial statements..."):
         try:
             # Use the actual logic now
@@ -170,26 +354,19 @@ if st.session_state.get('fm_financial_statements'):
         st.line_chart(statements["balance_sheet"].T[['Total Assets', 'Total Liabilities', 'Total Equity']])
     
     # --- SCENARIO ANALYSIS (Simple) ---
-    # Moved to sidebar in rec.md, but it's already in sidebar.
-    # If it were in main page, it could be an expander too.
-    st.sidebar.subheader("Scenario Analysis")
-    st.session_state.fm_scenario_revenue_sensitivity = st.sidebar.slider(
-        "Revenue Sensitivity (+/- %)", 
-        min_value=-0.5, max_value=0.5, 
-        value=st.session_state.fm_scenario_revenue_sensitivity, 
-        step=0.05, format="%.0f%%",
-        key="fm_rev_sensitivity_slider"
-        )
-
-    if st.session_state.fm_scenario_revenue_sensitivity != 0.0:
+    # The slider is now defined unconditionally in the sidebar.
+    # This section now only handles calculation and display if sensitivity is set and statements exist.
+    if st.session_state.fm_scenario_revenue_sensitivity != 0: # Check against integer 0
         original_revenue_y1 = st.session_state.fm_inputs["revenue_y1"]
         modified_inputs = st.session_state.fm_inputs.copy()
-        modified_inputs["revenue_y1"] = original_revenue_y1 * (1 + st.session_state.fm_scenario_revenue_sensitivity)
+        # Adjust calculation to divide sensitivity by 100.0
+        modified_inputs["revenue_y1"] = original_revenue_y1 * (1 + st.session_state.fm_scenario_revenue_sensitivity / 100.0)
         
         try:
             with st.spinner("Recalculating for scenario..."):
                 scenario_statements = financial_model_logic.generate_financial_statements(modified_inputs)
-            st.subheader(f"Scenario: Revenue {st.session_state.fm_scenario_revenue_sensitivity*100:+.0f}%")
+            # Display sensitivity directly as it's already a whole percentage number
+            st.subheader(f"Scenario: Revenue {st.session_state.fm_scenario_revenue_sensitivity:+.0f}%")
             
             scenario_display_cols = st.columns(2)
             with scenario_display_cols[0]:
