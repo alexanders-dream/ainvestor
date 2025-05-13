@@ -81,7 +81,14 @@ def get_llm(provider_name: str, model_name: str = None, **kwargs):
     model_to_use = model_name or provider_config["default_model"]
     llm_class = provider_config["class"]
 
-    init_args = {"model_name": model_to_use, **kwargs}
+    # Determine the correct parameter name for the model based on the provider
+    # ChatOpenAI, ChatGroq use "model_name"
+    # ChatGoogleGenerativeAI, ChatAnthropic, ChatOllama use "model"
+    model_param_key = "model_name" # Default
+    if provider_key in ["google", "anthropic", "ollama"]:
+        model_param_key = "model"
+
+    init_args = {model_param_key: model_to_use, **kwargs}
 
     # Handle API key parameter name
     if api_key and provider_config.get("api_key_param"):
