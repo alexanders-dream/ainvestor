@@ -1,0 +1,12 @@
+# Example YAML file for Investor Strategy Agent
+# This file can be uploaded to autofill the form
+
+startup_profile:
+  industry: "AI Analytics"
+  stage: "Seed"
+  funding_needed: "$750k - $1.5M"
+  usp: "Our AI-powered analytics platform reduces customer churn by 35% through predictive behavior analysis and automated engagement strategies."
+
+market_trends: "Growing demand for AI-driven customer retention solutions, increasing focus on customer lifetime value metrics, shift towards proactive rather than reactive customer service approaches."
+
+investor_preferences: "Focus on investors with B2B SaaS experience, particularly those interested in AI applications for business intelligence. Prefer VCs with experience scaling analytics startups."

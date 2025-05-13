@@ -1,0 +1,46 @@
+# Main Application Framework
+streamlit
+
+# LLM Interaction & Orchestration
+langchain
+langchain-openai
+langchain-anthropic
+langchain-google-genai # For Gemini models
+langchain-groq # For Groq models
+langchain-community # For ChatOllama and other community integrations
+
+# Data Handling
+pyyaml # For YAML parsing and generation
+
+# Specific LLM Provider SDKs (Langchain might handle some, but good to have if direct use is needed or for model listing)
+openai # Required by langchain-openai and for model listing
+# anthropic>=0.10.0,<0.20.0 # langchain-anthropic usually includes this
+google-generativeai # langchain-google-genai includes this, needed for model listing
+# groq>=0.4.0,<0.5.0 # For Groq API access if needed beyond langchain
+
+# File Parsing (Uncomment and specify versions when implemented)
+PyPDF2 # For PDF parsing (example)
+python-pptx # For PPTX parsing (example)
+pdfminer.six # Alternative PDF parser
+
+# Data Handling
+pandas
+
+# For Excel Export in Financial Modeling
+xlsxwriter # Used by pandas for .xlsx export
+
+# HTTP Requests (e.g., for fetching models from APIs like OpenRouter, Ollama)
+requests
+
+# Development & Testing Tools (Optional, but good practice)
+# pytest>=7.0.0,<8.0.0
+# pytest-mock>=3.0.0,<4.0.0 # For unittest.mock integration with pytest
+# flake8>=6.0.0,<7.0.0 # Linter
+# black>=23.0.0,<24.0.0 # Formatter
+
+# Notes:
+# - Version ranges are examples; adjust based on compatibility and project needs.
+# - Some Langchain packages (like langchain-openai) will pull in their direct dependencies (like the openai SDK).
+#   Explicitly listing them can help manage versions more directly if needed.
+# - The file parsing libraries (PyPDF2, python-pptx) are commented out as their
+#   implementation in utils.py is currently placeholder. Uncomment when you add the actual parsing logic.
