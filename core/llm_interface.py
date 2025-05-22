@@ -3,6 +3,7 @@ import streamlit as st
 import requests # For fetching models from some APIs if Langchain doesn't support it directly
 import json # For JSON handling
 import yaml # For YAML handling
+from typing import Optional # Added for Optional type hint
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -61,50 +62,50 @@ def get_llm(provider_name: str, model_name: str = None, **kwargs):
     if not provider_config or not provider_config.get("class"):
         raise ValueError(f"Unsupported or not yet configured LLM provider: {provider_name}")
 
-    api_key = None
-    if provider_config.get("api_key_secret"): # Check if 'api_key_secret' key exists
-        api_key_secret_name = provider_config["api_key_secret"]
-        if api_key_secret_name: # Check if the value of 'api_key_secret' is not None
-            api_key = st.secrets.get(api_key_secret_name)
-            if not api_key:
-                raise ValueError(
-                    f"API key ({provider_config['api_key_secret']}) for {provider_name} not found in st.secrets. "
-                    "Ensure it is set in .streamlit/secrets.toml."
-                )
-    elif provider_key != "ollama": # If api_key_secret is not defined or is None, and it's not ollama
-        # This case might indicate a configuration issue for providers that DO require keys
-        # but it's handled by the check within the 'if api_key_secret_name:' block mostly.
-        # Ollama is a special case that might not need an API key.
-        pass
+    # Prioritize API key and base_url from kwargs (passed from session state if user set them)
+    # Then try secrets, then config defaults.
+    api_key = kwargs.pop("api_key", None) 
+    base_url = kwargs.pop("base_url", None)
 
+    if not api_key and provider_config.get("api_key_secret"):
+        api_key_secret_name = provider_config["api_key_secret"]
+        if api_key_secret_name:
+            api_key = st.secrets.get(api_key_secret_name)
+            # Only raise error if key is strictly required by provider config and still not found
+            if not api_key and provider_key != "ollama": # Ollama might not need a key
+                 raise ValueError(
+                    f"API key ({api_key_secret_name}) for {provider_name} not found in st.secrets or provided manually. "
+                    "Ensure it is set in .streamlit/secrets.toml or in the UI."
+                )
+    
+    if not base_url: # If not passed via kwargs
+        if provider_config.get("base_url"): # Check hardcoded base_url in SUPPORTED_PROVIDERS
+            base_url = provider_config["base_url"]
+        elif provider_config.get("base_url_env_var"): # Check secrets for base_url
+            base_url_from_secrets = st.secrets.get(provider_config["base_url_env_var"])
+            if base_url_from_secrets:
+                base_url = base_url_from_secrets
+        # For Ollama, Langchain's ChatOllama might default to http://localhost:11434 if base_url not provided
 
     model_to_use = model_name or provider_config["default_model"]
     llm_class = provider_config["class"]
 
-    # Determine the correct parameter name for the model based on the provider
-    # ChatOpenAI, ChatGroq use "model_name"
-    # ChatGoogleGenerativeAI, ChatAnthropic, ChatOllama use "model"
-    model_param_key = "model_name" # Default
+    model_param_key = "model_name" # Default for OpenAI, Groq
     if provider_key in ["google", "anthropic", "ollama"]:
         model_param_key = "model"
 
-    init_args = {model_param_key: model_to_use, **kwargs}
+    init_args = {model_param_key: model_to_use, **kwargs} # Pass remaining kwargs
 
-    # Handle API key parameter name
     if api_key and provider_config.get("api_key_param"):
         init_args[provider_config["api_key_param"]] = api_key
-    elif api_key: # Default to 'api_key' if not specified, but might be wrong for some
-            init_args["api_key"] = api_key
-
-
-    # Handle base URL for providers like OpenRouter or Ollama
-    if provider_config.get("base_url"):
-        init_args["base_url"] = provider_config["base_url"]
-    elif provider_config.get("base_url_env_var"):
-        base_url_from_secrets = st.secrets.get(provider_config["base_url_env_var"])
-        if base_url_from_secrets:
-            init_args["base_url"] = base_url_from_secrets
-        # For Ollama, Langchain's ChatOllama might default to http://localhost:11434 if base_url not provided
+    elif api_key: # Default to 'api_key' if not specified (might be wrong for some, but ChatOpenAI uses it)
+        init_args["api_key"] = api_key
+    
+    if base_url: # If a base_url was determined
+        # For ChatOpenAI (used by OpenAI and OpenRouter), the param is 'base_url' or 'openai_api_base'
+        # Langchain's ChatOpenAI seems to prefer 'base_url' more recently.
+        # For ChatOllama, it's also 'base_url'.
+        init_args["base_url"] = base_url
 
     # Special handling for specific providers if needed
     if provider_key == "openrouter":
@@ -306,50 +307,82 @@ def get_llm_response(prompt_template_str: str,
     chain = LLMChain(llm=llm, prompt=prompt)
     # Langchain's .run() method can take a dictionary of variables or keyword arguments
     # Ensure input_variables matches the placeholders in prompt_template_str
-    try:
-        # Ensure all required keys are present in input_variables
-        # This is a common issue with LangChain chains
-        required_keys = []
-        for key in prompt_template_str.split("{"):
-            if "}" in key:
-                required_key = key.split("}")[0].strip()
-                if required_key and required_key not in required_keys:
-                    required_keys.append(required_key)
-
-        # Check if any required keys are missing from input_variables
-        missing_keys = [key for key in required_keys if key not in input_variables]
-        if missing_keys:
-            # Add missing keys with empty values to prevent chain execution errors
-            for key in missing_keys:
-                if key == "extracted_profiles":
-                    input_variables[key] = []
-                else:
-                    input_variables[key] = ""
-            st.warning(f"Added missing keys to prevent chain execution errors: {missing_keys}")
-
-        # Add special handling for the "extracted_profiles" key which seems to cause issues
-        if "extracted_profiles" not in input_variables and "extracted_profiles" not in missing_keys:
-            input_variables["extracted_profiles"] = []
-            st.warning("Added 'extracted_profiles' key as a precaution to prevent chain execution errors")
-
-        # Use a try-except block specifically for the chain.run call
+    try: # Outer try for the whole process after chain initialization
+        # The PromptTemplate itself will validate if all necessary input_variables are present
+        # when the chain is run. The previous custom key checking logic was problematic.
         try:
             response = chain.run(input_variables)
             return response
-        except KeyError as key_err:
-            # If we still get a KeyError, try to add the missing key and retry
-            missing_key = str(key_err).strip("'")
-            st.warning(f"KeyError during chain execution: {key_err}. Adding missing key and retrying.")
-            if missing_key == "extracted_profiles":
-                input_variables[missing_key] = []
-            else:
-                input_variables[missing_key] = ""
+        except KeyError as ke: # Specifically catch KeyError for missing keys in the prompt
+            st.error(f"Missing key in prompt variables for {llm_provider}/{llm.model_name if hasattr(llm, 'model_name') else 'unknown model'}: {ke}")
+            return f"Error: Missing key {ke} required by the prompt."
+        except Exception as e_chain: # More general exception for other chain run issues
+            st.error(f"Error during LLM chain execution with {llm_provider}/{llm.model_name if hasattr(llm, 'model_name') else 'unknown model'}: {e_chain}")
+            return f"Error processing LLM request during chain execution: {e_chain}"
+    except Exception as e_outer: # Catch errors in the key preparation or other logic
+        st.error(f"Outer error in get_llm_response before chain execution: {e_outer}")
+        return f"Error preparing LLM request: {e_outer}"
 
-            # Try one more time
-            response = chain.run(input_variables)
-            return response
+class LLMInterface:
+    """
+    A wrapper class to provide a consistent interface for LLM interactions,
+    particularly for generating text as expected by various logic engines.
+    """
+    def __init__(self, provider: Optional[str] = None, model: Optional[str] = None):
+        """
+        Initializes the LLMInterface.
+        If provider and model are not given, they should be available in st.session_state
+        when generate_text is called (e.g., from a sidebar selection).
+        """
+        self.default_provider = provider
+        self.default_model = model
 
-    except Exception as e:
-        st.error(f"Error during LLM chain execution with {llm_provider}/{llm.model_name if hasattr(llm, 'model_name') else 'unknown model'}: {e}")
-        # Return a more useful error message that won't break YAML parsing
-        return dump_yaml({"extracted_profiles": [], "error": f"Error processing LLM request: {e}"})
+    def generate_text(self, prompt_template_str: str, max_tokens: Optional[int] = None, **input_variables) -> str:
+        """
+        Generates text using the configured LLM.
+
+        Args:
+            prompt_template_str: The prompt template string.
+            max_tokens: The maximum number of tokens to generate.
+            **input_variables: Variables to fill into the prompt template.
+
+        Returns:
+            The LLM-generated text as a string, or an error message string.
+        """
+        # Determine provider and model to use from global session state,
+        # falling back to instance defaults or hardcoded if necessary.
+        default_provider_fallback = "openai" # A general fallback if nothing else is set
+        if SUPPORTED_PROVIDERS:
+            default_provider_fallback = list(SUPPORTED_PROVIDERS.keys())[0]
+
+
+        current_provider = self.default_provider or st.session_state.get("global_ai_provider", default_provider_fallback)
+        current_model = self.default_model or st.session_state.get("global_ai_model")
+        # If current_model is still None, get_llm_response will use the provider's default.
+
+        llm_kwargs = {}
+        if max_tokens is not None:
+            llm_kwargs["max_tokens"] = max_tokens
+        
+        # Temperature from global session state
+        temperature = st.session_state.get("global_temperature", 0.7) # Default temperature
+        llm_kwargs["temperature"] = temperature
+
+        # API Key and Endpoint from global session state (if set by user in UI)
+        # These will be passed to get_llm via get_llm_response's **llm_kwargs
+        global_api_key = st.session_state.get("global_api_key")
+        if global_api_key:
+            llm_kwargs["api_key"] = global_api_key
+        
+        global_api_endpoint = st.session_state.get("global_api_endpoint")
+        if global_api_endpoint:
+            llm_kwargs["base_url"] = global_api_endpoint
+
+        response = get_llm_response(
+            prompt_template_str=prompt_template_str,
+            input_variables=input_variables,
+            llm_provider=current_provider,
+            llm_model=current_model,
+            **llm_kwargs # This will now include api_key and base_url if set globally
+        )
+        return response

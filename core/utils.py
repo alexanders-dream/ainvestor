@@ -1,5 +1,6 @@
 import streamlit as st
 from io import BytesIO
+from typing import Optional, Dict, Any # Added
 # For PDF parsing
 from PyPDF2 import PdfReader # Example, or use pdfminer.six for more robust extraction
 # For PPTX parsing
@@ -148,3 +149,93 @@ if __name__ == "__main__":
     # For now, this module mainly contains placeholders for file parsing.
     st.write("Utils module loaded. Contains placeholders for file parsing.")
     st.write("Run Streamlit pages to test integration of these utils.")
+
+def extract_json_from_response(text: str) -> Optional[Dict[Any, Any]]:
+    """
+    Extracts a JSON object from a text string, often from an LLM response.
+    Handles JSON within markdown code blocks (```json ... ```) or as a raw string.
+
+    Args:
+        text (str): The text potentially containing a JSON object.
+
+    Returns:
+        Optional[Dict[Any, Any]]: The parsed JSON object as a dictionary, or None if parsing fails.
+    """
+    import json # Local import for this function
+    if not text:
+        return None
+
+    try:
+        # Case 1: JSON is within a markdown code block (```json ... ```)
+        if "```json" in text:
+            json_match = text.split("```json", 1)
+            if len(json_match) > 1:
+                json_part = json_match[1].split("```", 1)[0].strip()
+                return json.loads(json_part)
+        
+        # Case 2: JSON is within a generic markdown code block (``` ... ```)
+        # This is less specific, so try after the ```json block
+        if "```" in text:
+            # Try to find the first complete code block
+            parts = text.split("```", 2)
+            if len(parts) > 1: # Found at least one ```
+                potential_json = parts[1].strip()
+                # Attempt to parse it, could be JSON or something else
+                try:
+                    # Check if it's a valid JSON by trying to load it
+                    # We need to be careful not to parse YAML here if it's also in a code block
+                    # A simple heuristic: JSON usually starts with { or [
+                    if potential_json.startswith("{") or potential_json.startswith("["):
+                        return json.loads(potential_json)
+                except json.JSONDecodeError:
+                    pass # Not valid JSON, or not the JSON we are looking for
+
+        # Case 3: Raw JSON string (attempt to parse the whole thing or find the first valid JSON object)
+        # This is tricky because LLM responses can have leading/trailing text.
+        # Try to find the first '{' or '[' and the last '}' or ']'
+        first_brace = text.find('{')
+        first_bracket = text.find('[')
+        
+        start_index = -1
+
+        if first_brace != -1 and (first_bracket == -1 or first_brace < first_bracket):
+            start_index = first_brace
+            end_char = '}'
+        elif first_bracket != -1:
+            start_index = first_bracket
+            end_char = ']'
+        
+        if start_index != -1:
+            # Find the matching closing character. This is a simplified approach.
+            # A robust solution might need to count opening/closing braces/brackets.
+            open_chars = 0
+            end_index = -1
+            for i in range(start_index, len(text)):
+                if text[i] == ('{' if end_char == '}' else '['):
+                    open_chars += 1
+                elif text[i] == end_char:
+                    open_chars -= 1
+                    if open_chars == 0:
+                        end_index = i + 1
+                        break
+            
+            if end_index != -1:
+                potential_json = text[start_index:end_index]
+                try:
+                    return json.loads(potential_json)
+                except json.JSONDecodeError:
+                    pass # Continue if this substring isn't valid JSON
+
+        # Fallback: try parsing the whole text if it looks like it might be JSON
+        if (text.strip().startswith("{") and text.strip().endswith("}")) or \
+           (text.strip().startswith("[") and text.strip().endswith("]")):
+            try:
+                return json.loads(text.strip())
+            except json.JSONDecodeError:
+                pass
+
+    except Exception: # Broad exception for any parsing issue
+        # st.warning(f"Could not parse JSON from response: {e}") # Optional: log error
+        return None
+    
+    return None # If no JSON found or parsing failed

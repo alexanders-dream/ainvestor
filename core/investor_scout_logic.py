@@ -1,44 +1,65 @@
 import pandas as pd
-import yaml
+import yaml # Keep for potential direct use if needed, though yaml_utils is preferred
 import streamlit as st # For st.secrets and potentially st.error/st.info
 from .llm_interface import get_llm_response
 from prompts import firecrawl_processing_prompts # Using the new prompt
 from .firecrawl_api import FirecrawlAPI
-from .yaml_utils import load_yaml, dump_yaml, extract_yaml_from_text, create_default_investor_yaml
+from .yaml_utils import load_yaml as load_yaml_util, dump_yaml as dump_yaml_util, extract_yaml_from_text, create_default_investor_yaml # Renamed to avoid conflict
+import io # For reading file content
 
-# Path to the local CSV database
-INVESTOR_DB_PATH = "data/investor_db.csv"
+# Path to the local YAML database
+INVESTOR_DB_PATH = "data/investor_db.yaml"
 
 def load_investor_database():
     """
-    Loads the investor database from a CSV file.
+    Loads the investor database from a YAML file.
 
     Returns:
         pd.DataFrame: DataFrame containing investor data.
-                      Returns an empty DataFrame if the file is not found or is empty.
+                      Returns an empty DataFrame if the file is not found, is empty, or parsing fails.
     Raises:
-        FileNotFoundError: If the investor_db.csv is not found.
-        pd.errors.EmptyDataError: If the CSV file is empty.
-        Exception: For other pandas related read errors.
+        FileNotFoundError: If the investor_db.yaml is not found.
+        Exception: For other file reading or YAML parsing errors.
     """
     try:
-        df = pd.read_csv(INVESTOR_DB_PATH)
-        # Basic validation: check for essential columns if any are expected
-        # For now, we assume it's valid if it loads.
+        with open(INVESTOR_DB_PATH, 'r', encoding='utf-8') as f:
+            yaml_content = f.read()
+        
+        if not yaml_content.strip(): # Check if file is empty or only whitespace
+            print(f"Info: Investor database file {INVESTOR_DB_PATH} is empty.")
+            return pd.DataFrame()
+
+        data = load_yaml_util(yaml_content) # Use the renamed utility
+        
+        if data is None: # load_yaml_util returns None on error
+            print(f"Error: Failed to parse YAML from {INVESTOR_DB_PATH}. load_yaml_util returned None.")
+            return pd.DataFrame() # Return empty DataFrame if parsing failed
+
+        if not isinstance(data, list):
+            print(f"Error: YAML data in {INVESTOR_DB_PATH} is not a list as expected. Found type: {type(data)}")
+            return pd.DataFrame()
+        
+        if not data: # Empty list in YAML
+             print(f"Info: Investor database {INVESTOR_DB_PATH} contains an empty list.")
+             return pd.DataFrame()
+
+        df = pd.DataFrame(data)
+        # Basic validation can remain similar if column names are consistent
         # Example:
         # if 'Investor Name' not in df.columns or 'Focus Industry' not in df.columns:
-        #     raise ValueError("Investor database is missing essential columns.")
+        #     st.warning("Investor database (YAML) is missing essential columns.") # Use st.warning or print
+        #     # Depending on strictness, you might return an empty df or the df as is
         return df
     except FileNotFoundError:
         # This will be caught by the calling function in the Streamlit page
         raise FileNotFoundError(f"Investor database not found at {INVESTOR_DB_PATH}")
-    except pd.errors.EmptyDataError:
-        # This means the file exists but is empty
-        return pd.DataFrame() # Return an empty DataFrame
+    except yaml.YAMLError as e_yaml: # Catch specific YAML errors if load_yaml_util re-raises them or if direct yaml use
+        print(f"Error parsing YAML from {INVESTOR_DB_PATH}: {e_yaml}")
+        raise Exception(f"YAML parsing error in {INVESTOR_DB_PATH}: {e_yaml}") # Re-raise as a general exception
     except Exception as e:
-        # Catch other potential pandas errors during read_csv
-        print(f"Error loading investor database: {e}")
-        raise
+        # Catch other potential errors during file reading or DataFrame conversion
+        print(f"Error loading investor database from YAML: {e}")
+        raise # Re-raise the exception to be handled by the caller
 
 
 def find_investors(industry: str, stage: str, min_investment: int, max_investment: int, keywords: str = "",
@@ -61,10 +82,13 @@ def find_investors(industry: str, stage: str, min_investment: int, max_investmen
     """
     try:
         investor_df = load_investor_database()
-    except (FileNotFoundError, pd.errors.EmptyDataError) as e:
-        # If DB not found or empty, return an empty DataFrame immediately.
+    except FileNotFoundError as e_fnf:
+        # If DB not found, return an empty DataFrame immediately.
         # The Streamlit page will handle displaying the error message.
-        print(f"Info: {e}") # Log this info
+        print(f"Info: {e_fnf}") # Log this info
+        return pd.DataFrame()
+    except Exception as e_load: # Catch broader exceptions from load_investor_database
+        print(f"Error during investor database loading: {e_load}")
         return pd.DataFrame()
 
 
@@ -234,25 +258,33 @@ def find_investors_firecrawl(
                     if not yaml_content:
                         st.warning(f"Could not extract YAML from LLM response for {url}. Creating default structure.")
                         # Create a default YAML structure
-                        default_yaml = create_default_investor_yaml()
-                        extracted_data = load_yaml(default_yaml)
+                        default_yaml_str = create_default_investor_yaml() # Returns a string
+                        extracted_data = load_yaml_util(default_yaml_str) # Parse the string
                         # Add source information
-                        extracted_data["extracted_profiles"][0]["name"] = f"Parsing Error for {url.split('/')[-1]}"
-                        extracted_data["extracted_profiles"][0]["description"] = f"LLM did not return YAML format for {url}"
-                        extracted_data["extracted_profiles"][0]["source_platform"] = url
-                        extracted_data["extracted_profiles"][0]["notes"] = f"Raw LLM response: {llm_response_str[:100]}..."
+                        if extracted_data and "extracted_profiles" in extracted_data and extracted_data["extracted_profiles"]:
+                            extracted_data["extracted_profiles"][0]["name"] = f"Parsing Error for {url.split('/')[-1]}"
+                            extracted_data["extracted_profiles"][0]["description"] = f"LLM did not return YAML format for {url}"
+                            extracted_data["extracted_profiles"][0]["source_platform"] = url
+                            extracted_data["extracted_profiles"][0]["notes"] = f"Raw LLM response: {llm_response_str[:100]}..."
+                        else: # Should not happen if create_default_investor_yaml is correct
+                            st.error("Failed to create or structure default investor YAML.")
+                            extracted_data = {"extracted_profiles": []} # Ensure it's a dict
                     else:
                         # Try to parse the YAML
-                        extracted_data = load_yaml(yaml_content)
+                        extracted_data = load_yaml_util(yaml_content)
                         if not extracted_data or not isinstance(extracted_data, dict):
                             st.warning(f"Invalid YAML structure from LLM for {url}. Creating default structure.")
-                            default_yaml = create_default_investor_yaml()
-                            extracted_data = load_yaml(default_yaml)
+                            default_yaml_str = create_default_investor_yaml()
+                            extracted_data = load_yaml_util(default_yaml_str)
                             # Add source information
-                            extracted_data["extracted_profiles"][0]["name"] = f"Parsing Error for {url.split('/')[-1]}"
-                            extracted_data["extracted_profiles"][0]["description"] = f"Invalid YAML structure from LLM for {url}"
-                            extracted_data["extracted_profiles"][0]["source_platform"] = url
-                            extracted_data["extracted_profiles"][0]["notes"] = f"Raw YAML: {yaml_content[:100]}..."
+                            if extracted_data and "extracted_profiles" in extracted_data and extracted_data["extracted_profiles"]:
+                                extracted_data["extracted_profiles"][0]["name"] = f"Parsing Error for {url.split('/')[-1]}"
+                                extracted_data["extracted_profiles"][0]["description"] = f"Invalid YAML structure from LLM for {url}"
+                                extracted_data["extracted_profiles"][0]["source_platform"] = url
+                                extracted_data["extracted_profiles"][0]["notes"] = f"Raw YAML: {yaml_content[:100]}..."
+                            else:
+                                st.error("Failed to create or structure default investor YAML after invalid LLM YAML.")
+                                extracted_data = {"extracted_profiles": []} # Ensure it's a dict
 
                     investors_on_page = extracted_data.get("extracted_profiles", [])
 
@@ -310,12 +342,35 @@ if __name__ == '__main__':
         'Contact/Website': ['techgrowth.vc', 'seedspark.com', 'biohealth.fund', 'globalimpact.org', 'earlyangels.net'],
         'Notes': ['Focus on enterprise SaaS solutions.', 'Looking for disruptive AI models.', 'Invests in novel drug discovery.', 'Requires strong ESG metrics.', 'Likes hardware and software consumer products. B2C focus.']
     }
-    dummy_df = pd.DataFrame(dummy_data)
+    # Convert dummy_data (list of dicts) to YAML string
+    yaml_string = dump_yaml_util(dummy_data_list) # Use the renamed utility
+
     import os
     if not os.path.exists('data'):
         os.makedirs('data')
-    dummy_df.to_csv(INVESTOR_DB_PATH, index=False)
-    print(f"Created dummy {INVESTOR_DB_PATH}")
+    
+    # Write the YAML string to the file
+    with open(INVESTOR_DB_PATH, 'w', encoding='utf-8') as f:
+        f.write(yaml_string)
+    print(f"Created dummy YAML {INVESTOR_DB_PATH}")
+
+    # Test data as a list of dictionaries, which is what YAML load should produce before DataFrame conversion
+    dummy_data_list = [
+        {'Investor Name': 'TechGrowth Ventures', 'Focus Industry': 'Technology, SaaS', 'Typical Stage': 'Series A, Series B', 'Min Investment': 1000000, 'Max Investment': 10000000, 'Investment Range (Text)': '$1M - $10M', 'Contact/Website': 'techgrowth.vc', 'Notes': 'Focus on enterprise SaaS solutions.'},
+        {'Investor Name': 'SeedSpark Capital', 'Focus Industry': 'Technology, AI, Mobile', 'Typical Stage': 'Seed, Pre-Seed', 'Min Investment': 50000, 'Max Investment': 500000, 'Investment Range (Text)': '$50k - $500k', 'Contact/Website': 'seedspark.com', 'Notes': 'Looking for disruptive AI models.'},
+        {'Investor Name': 'BioHealth Fund', 'Focus Industry': 'Healthcare, Biotech', 'Typical Stage': 'Seed, Series A', 'Min Investment': 250000, 'Max Investment': 5000000, 'Investment Range (Text)': '$250k - $5M', 'Contact/Website': 'biohealth.fund', 'Notes': 'Invests in novel drug discovery.'},
+        {'Investor Name': 'Global Impact Investors', 'Focus Industry': 'Social Impact, Cleantech', 'Typical Stage': 'All Stages', 'Min Investment': 500000, 'Max Investment': 10000000, 'Investment Range (Text)': '$500k - $10M', 'Contact/Website': 'globalimpact.org', 'Notes': 'Requires strong ESG metrics.'},
+        {'Investor Name': 'EarlyStage Angels', 'Focus Industry': 'Technology, Consumer', 'Typical Stage': 'Seed', 'Min Investment': 25000, 'Max Investment': 200000, 'Investment Range (Text)': '$25k - $200k', 'Contact/Website': 'earlyangels.net', 'Notes': 'Likes hardware and software consumer products. B2C focus.'}
+    ]
+    
+    # Create the dummy investor_db.yaml for testing
+    yaml_output_for_db = dump_yaml_util(dummy_data_list)
+    if not os.path.exists('data'):
+        os.makedirs('data')
+    with open(INVESTOR_DB_PATH, 'w', encoding='utf-8') as f:
+        f.write(yaml_output_for_db)
+    print(f"Recreated dummy {INVESTOR_DB_PATH} for testing.")
+
 
     print("\n--- Test 1: Technology, Seed, $100k-$600k ---")
     results1 = find_investors(industry="Technology", stage="Seed", min_investment=100000, max_investment=600000, keywords="AI")
@@ -342,4 +397,7 @@ if __name__ == '__main__':
     # except FileNotFoundError as e:
     #     print(e) # This error should be caught by the UI layer
     # # Recreate for other potential tests
-    # dummy_df.to_csv(INVESTOR_DB_PATH, index=False)
+    # Recreate dummy YAML if it was removed for testing 'file not found'
+    # yaml_output_for_db_recreate = dump_yaml_util(dummy_data_list)
+    # with open(INVESTOR_DB_PATH, 'w', encoding='utf-8') as f:
+    #     f.write(yaml_output_for_db_recreate)

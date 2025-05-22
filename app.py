@@ -37,6 +37,8 @@ def initialize_global_session_state():
             "funding_needed": "",
             "usp": ""
         }
+    if 'global_pitch_deck_raw_text' not in st.session_state: # Added for raw text
+        st.session_state.global_pitch_deck_raw_text = ""
     # Initialize status for project tracking
     if 'pitch_deck_status' not in st.session_state:
         st.session_state.pitch_deck_status = "Not Started"
@@ -387,6 +389,9 @@ def main():
                         extracted_data = core_utils.parse_pitch_deck(st.session_state.pda_uploaded_file)
                         
                         # 2. Get feedback from LLM
+                        # Store raw text globally
+                        st.session_state.global_pitch_deck_raw_text = extracted_data.get('raw_full_text', "")
+
                         feedback = core_pitch_deck_logic.get_deck_feedback_from_llm(
                             extracted_sections_data=extracted_data,
                             provider=st.session_state.global_ai_provider,

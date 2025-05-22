@@ -193,3 +193,53 @@ def parse_uploaded_yaml_file(uploaded_file: st.runtime.uploaded_file_manager.Upl
     except Exception as e:
         st.error(f"Error parsing uploaded YAML file: {e}")
         return None
+
+def save_assumptions_yaml(assumptions_dict: Dict[str, Any], file_path: str) -> bool:
+    """
+    Saves a dictionary of financial assumptions to a YAML file.
+
+    Args:
+        assumptions_dict (Dict[str, Any]): The dictionary of assumptions to save.
+        file_path (str): The path to save the YAML file to.
+
+    Returns:
+        bool: True if saving was successful, False otherwise.
+    """
+    try:
+        yaml_string = dump_yaml(assumptions_dict)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(yaml_string)
+        return True
+    except Exception as e:
+        st.error(f"Error saving assumptions to YAML file {file_path}: {e}")
+        return False
+
+def load_assumptions_yaml(file_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Loads a dictionary of financial assumptions from a YAML file.
+
+    Args:
+        file_path (str): The path to the YAML file to load.
+
+    Returns:
+        Optional[Dict[str, Any]]: The loaded dictionary of assumptions, or None if loading fails.
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            yaml_content = f.read()
+        
+        if not yaml_content.strip():
+            st.warning(f"Assumption file {file_path} is empty.")
+            return None # Or an empty dict {} depending on desired behavior
+
+        assumptions_dict = load_yaml(yaml_content)
+        if not isinstance(assumptions_dict, dict):
+            st.error(f"Content of {file_path} is not a valid assumptions dictionary (expected dict, got {type(assumptions_dict)}).")
+            return None
+        return assumptions_dict
+    except FileNotFoundError:
+        st.error(f"Assumptions file not found: {file_path}")
+        return None
+    except Exception as e:
+        st.error(f"Error loading assumptions from YAML file {file_path}: {e}")
+        return None

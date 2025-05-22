@@ -1,9 +1,89 @@
 import streamlit as st
 import pandas as pd
+import json # Added for JSON display
 from io import BytesIO # For excel export
-from core import financial_model_logic
-from core.utils import styled_card # Import styled_card
+
+from core import financial_model_logic # Existing
+from core.llm_interface import LLMInterface
+from core.business_understanding_logic import BusinessUnderstandingLogic
+from core.model_structuring_logic import ModelStructuringLogic
+from core.assumption_engine import AssumptionEngine # Added
+from core.formula_logic_engine import FormulaLogicEngine # Added
+from core.scenario_analysis_engine import ScenarioAnalysisEngine # Added
+from core.model_validation_engine import ModelValidationEngine # Added
+from core.interpretation_engine import InterpretationEngine
+from core.utils import styled_card
+from core.yaml_utils import dump_yaml as dump_yaml_util, load_yaml as load_yaml_util # For saving/loading assumptions
 # LLM interface for guidance/tips would use global config from app.py's sidebar
+
+# --- Initialize LLM and Business Logic ---
+# This should ideally be done once, perhaps cached or in a central app setup.
+# For simplicity in this page, we initialize here.
+# Ensure API keys are set in environment variables if using cloud LLMs.
+try:
+    if 'llm_interface' not in st.session_state:
+        st.session_state.llm_interface = LLMInterface()
+    llm = st.session_state.llm_interface
+except Exception as e:
+    st.error(f"Critical Error: Failed to initialize LLM Interface: {e}. Ensure API key is configured. The page cannot proceed.")
+    st.stop() # Stop execution if LLM can't load
+
+try:
+    if 'bu_logic' not in st.session_state:
+        st.session_state.bu_logic = BusinessUnderstandingLogic(llm_interface=llm)
+    bu_logic = st.session_state.bu_logic # Business Understanding Logic
+except Exception as e:
+    st.error(f"Critical Error: Failed to initialize Business Understanding Logic: {e}. The page cannot proceed.")
+    st.stop()
+
+try:
+    if 'ms_logic' not in st.session_state:
+        st.session_state.ms_logic = ModelStructuringLogic(llm_interface=llm) # Model Structuring Logic
+    ms_logic = st.session_state.ms_logic # Model Structuring Logic
+except Exception as e:
+    st.error(f"Critical Error: Failed to initialize Model Structuring Logic: {e}. The page cannot proceed.")
+    st.stop()
+
+try:
+    if 'ae_logic' not in st.session_state:
+        st.session_state.ae_logic = AssumptionEngine(llm_interface=llm) # Assumption Engine Logic
+    ae = st.session_state.ae_logic # Assumption Engine Logic
+except Exception as e:
+    st.error(f"Critical Error: Failed to initialize Assumption Engine: {e}. The page cannot proceed.")
+    st.stop()
+
+try:
+    if 'fle_logic' not in st.session_state:
+        st.session_state.fle_logic = FormulaLogicEngine(llm_interface=llm) # Formula Logic Engine
+    fle = st.session_state.fle_logic # Formula Logic Engine
+except Exception as e:
+    st.error(f"Critical Error: Failed to initialize Formula Logic Engine: {e}. The page cannot proceed.")
+    st.stop()
+
+try:
+    if 'sae_logic' not in st.session_state:
+        st.session_state.sae_logic = ScenarioAnalysisEngine(llm_interface=llm) # Scenario Analysis Engine
+    sae = st.session_state.sae_logic # Scenario Analysis Engine
+except Exception as e:
+    st.error(f"Critical Error: Failed to initialize Scenario Analysis Engine: {e}. The page cannot proceed.")
+    st.stop()
+
+try:
+    if 'mve_logic' not in st.session_state:
+        st.session_state.mve_logic = ModelValidationEngine(llm_interface=llm) # Model Validation Engine
+    mve = st.session_state.mve_logic # Model Validation Engine
+except Exception as e:
+    st.error(f"Critical Error: Failed to initialize Model Validation Engine: {e}. The page cannot proceed.")
+    st.stop()
+
+try:
+    if 'ie_logic' not in st.session_state:
+        st.session_state.ie_logic = InterpretationEngine(llm_interface=llm) # Interpretation Engine
+    ie = st.session_state.ie_logic
+except Exception as e:
+    st.error(f"Critical Error: Failed to initialize Interpretation Engine: {e}. The page cannot proceed.")
+    st.stop()
+
 
 st.set_page_config(page_title="Financial Modeling", layout="wide")
 
@@ -109,27 +189,382 @@ def initialize_page_session_state():
     if 'fm_scenario_revenue_sensitivity' not in st.session_state:
         st.session_state.fm_scenario_revenue_sensitivity = 0 # Changed to integer 0
 
+    # --- Session State for Business Understanding ---
+    if 'business_assumptions' not in st.session_state:
+        st.session_state.business_assumptions = None # Will store dict from BU logic
+    if 'bu_conversation_history' not in st.session_state: # For chat display
+        st.session_state.bu_conversation_history = []
+    if 'current_bu_question' not in st.session_state:
+        st.session_state.current_bu_question = None
+    if 'pitch_deck_text_input' not in st.session_state:
+        st.session_state.pitch_deck_text_input = ""
+
+    # --- Session State for Model Structuring ---
+    if 'model_structure_suggestion' not in st.session_state:
+        st.session_state.model_structure_suggestion = None # Stores AI's full suggestion
+    if 'selected_template_id' not in st.session_state:
+        st.session_state.selected_template_id = None # User's final choice
+    if 'final_model_structure' not in st.session_state: # Will hold components & KPIs for the chosen model
+        st.session_state.final_model_structure = None
+
+    # --- Session State for Assumption Guidance ---
+    if 'assumption_guidance_texts' not in st.session_state: # Dict to store guidance for multiple fields
+        st.session_state.assumption_guidance_texts = {}
+    if 'assumption_review_feedback' not in st.session_state:
+        st.session_state.assumption_review_feedback = None
+    if 'proceed_after_review' not in st.session_state: # Flag to control generation after review
+        st.session_state.proceed_after_review = False
+
+    # --- Session State for Formula/Logic Explanations ---
+    if 'formula_explanation_topic' not in st.session_state:
+        st.session_state.formula_explanation_topic = "" # User input for topic
+    if 'formula_explanation_output' not in st.session_state: # Stores the AI's explanation
+        st.session_state.formula_explanation_output = None
+    if 'interdependency_explanation_output' not in st.session_state:
+        st.session_state.interdependency_explanation_output = None
+
+    # --- Session State for Scenario Analysis Suggestions ---
+    if 'scenario_variable_suggestions' not in st.session_state:
+        st.session_state.scenario_variable_suggestions = None
+
+    # --- Session State for Model Validation ---
+    if 'model_reasonableness_feedback' not in st.session_state:
+        st.session_state.model_reasonableness_feedback = None
+
+    # --- Session State for Interpretation & Presentation ---
+    if 'kpi_to_explain' not in st.session_state:
+        st.session_state.kpi_to_explain = None
+    if 'kpi_explanation_output' not in st.session_state:
+        st.session_state.kpi_explanation_output = None
+    if 'financial_summary_narrative' not in st.session_state:
+        st.session_state.financial_summary_narrative = None
+
 
 initialize_page_session_state()
 
-st.title("Financial Modeling Agent 💰")
+st.title("AI-Guided Financial Modeling 💰") # Title updated
 st.markdown("Input your key assumptions to generate basic 3-year financial projections. Configure AI provider in the sidebar if LLM guidance features are used.")
 
+# --- 1. Business Understanding & Contextualization ---
+with st.expander("Step 1: Understand Your Business 📝", expanded=True):
+    st.subheader("A. Load Business Context from Dashboard")
+    st.markdown("""
+    If you have analyzed your pitch deck on the main dashboard, the extracted structured information 
+    can be loaded here to kickstart the business understanding process for financial modeling.
+    """)
+
+    if st.button("Load Business Info from Dashboard Analysis", key="load_bu_from_dashboard_btn"):
+        structured_info = st.session_state.get("global_pitch_deck_extracted_info")
+        if structured_info and isinstance(structured_info, dict):
+            with st.spinner("Loading and processing structured business info..."):
+                try:
+                    # Reset previous BU state before new loading
+                    st.session_state.business_assumptions = None
+                    st.session_state.current_bu_question = None
+                    st.session_state.bu_logic.reset_conversation() # Reset history in logic
+
+                    # Use the new method in BusinessUnderstandingLogic
+                    initialized_assumptions = bu_logic.initialize_assumptions_from_structured_data(structured_info)
+                    
+                    if initialized_assumptions:
+                        st.session_state.business_assumptions = initialized_assumptions
+                        st.success("Business information loaded and initialized successfully from dashboard analysis!")
+                        
+                        # Immediately try to get a clarification question based on the loaded assumptions
+                        question = bu_logic.get_clarification_question(st.session_state.business_assumptions)
+                        st.session_state.current_bu_question = question
+                        st.session_state.bu_conversation_history = bu_logic.get_full_conversation_history()
+                    else:
+                        st.error("Failed to initialize business assumptions from the structured data.")
+                except Exception as e:
+                    st.error(f"An error occurred during loading/processing: {e}")
+        else:
+            st.warning("No structured business information found from dashboard analysis. Please analyze your pitch deck on the main dashboard first.")
+
+    # The rest of the logic for displaying assumptions and handling clarifications remains largely the same,
+    # but it now operates on st.session_state.business_assumptions which can be populated by the new button.
+    if st.session_state.business_assumptions:
+        st.subheader("B. Review Loaded/Updated Assumptions & Clarify")
+        st.json(st.session_state.business_assumptions)
+
+        # Display conversation history (simplified)
+        # for msg in st.session_state.get("bu_conversation_history", []):
+        #     if msg["role"] == "assistant" and "Extracted data:" not in msg["content"] and "Updated assumptions:" not in msg["content"]:
+        #         st.info(f"AI: {msg['content']}") # AI questions
+        #     elif msg["role"] == "user":
+        #         st.text_input("Your previous answer:", value=msg['content'], disabled=True, key=f"hist_user_{len(st.session_state.bu_conversation_history)}_{msg['content'][:10]}")
+
+
+        if st.session_state.current_bu_question:
+            st.info(f"AI Clarification: {st.session_state.current_bu_question}")
+            user_clarification_response = st.text_input(
+                "Your answer:",
+                key="user_bu_clarification_response_area"
+            )
+            if st.button("Submit Clarification", key="submit_bu_clarification_btn"):
+                if user_clarification_response and st.session_state.business_assumptions:
+                    with st.spinner("AI is processing your answer..."):
+                        try:
+                            updated_assumptions = bu_logic.update_assumptions_with_user_response(
+                                st.session_state.business_assumptions,
+                                user_clarification_response
+                            )
+                            if updated_assumptions:
+                                st.session_state.business_assumptions = updated_assumptions
+                                st.success("Business assumptions updated!")
+                                # Ask another question or conclude
+                                new_question = bu_logic.get_clarification_question(updated_assumptions)
+                                st.session_state.current_bu_question = new_question
+                                st.session_state.bu_conversation_history = bu_logic.get_full_conversation_history()
+
+                                # Clear the input box by rerunning
+                                st.rerun()
+                            else:
+                                st.error("Could not update assumptions based on your response.")
+                        except Exception as e:
+                            st.error(f"An error occurred during update: {e}")
+                else:
+                    st.warning("Please provide an answer to the clarification question.")
+        elif st.session_state.business_assumptions and not st.session_state.current_bu_question:
+             st.success("Step 1: Business Understanding seems complete based on the current AI assessment!")
+             st.markdown("---") # Visual separator
+
+# --- 2. Model Structuring & Template Suggestion ---
+# This section activates after business assumptions are stable (no pending BU questions)
+if st.session_state.get("business_assumptions") and not st.session_state.get("current_bu_question"):
+    with st.expander("Step 2: Define Model Structure 🏗️", expanded=True):
+        st.write("Based on your business information, the AI can suggest a suitable financial model template.")
+
+        if st.button("Suggest Model Structure", key="suggest_model_structure_btn"):
+            with st.spinner("AI is thinking about the best model structure..."):
+                try:
+                    suggestion = ms_logic.suggest_model_template(st.session_state.business_assumptions)
+                    if suggestion:
+                        st.session_state.model_structure_suggestion = suggestion
+                        # Pre-select the AI's recommendation if valid
+                        if suggestion.get("recommended_template_id") in ms_logic.get_available_templates_summary():
+                            st.session_state.selected_template_id = suggestion.get("recommended_template_id")
+                        elif ms_logic.get_available_templates_summary(): # if recommendation is bad, pick first available
+                            st.session_state.selected_template_id = list(ms_logic.get_available_templates_summary().keys())[0]
+                        st.success("AI has suggested a model structure.")
+                    else:
+                        st.error("AI could not generate a model structure suggestion at this time.")
+                except Exception as e:
+                    st.error(f"Error suggesting model structure: {e}")
+
+        if st.session_state.model_structure_suggestion:
+            suggestion = st.session_state.model_structure_suggestion
+            st.subheader("AI Suggestion:")
+            st.markdown(f"**Recommended Template:** `{suggestion.get('recommended_template_id', 'N/A')}`")
+            st.info(f"**Reasoning:** {suggestion.get('reasoning', 'No reasoning provided.')}")
+            
+            if suggestion.get("alternative_template_ids"):
+                st.markdown(f"**Alternative Templates:** `{(', '.join(suggestion.get('alternative_template_ids')))}`")
+            
+            st.markdown("**Essential Model Components Suggested:**")
+            if suggestion.get("essential_components"):
+                for comp in suggestion.get("essential_components"):
+                    st.markdown(f"- {comp}")
+            
+            st.markdown("**Suggested Key Performance Indicators (KPIs):**")
+            if suggestion.get("suggested_kpis"):
+                for kpi in suggestion.get("suggested_kpis"):
+                    st.markdown(f"- {kpi}")
+            else:
+                st.markdown("_No specific KPIs suggested by AI, consider standard ones for the chosen template._")
+            st.markdown("---")
+
+        # Allow user to select or override
+        available_templates_summary = ms_logic.get_available_templates_summary()
+        template_options = {id: f"{name} ({id})" for id, name in available_templates_summary.items()}
+        
+        # Ensure selected_template_id is valid, default if not
+        if not st.session_state.get("selected_template_id") and available_templates_summary:
+             st.session_state.selected_template_id = list(available_templates_summary.keys())[0]
+
+
+        selected_id = st.selectbox(
+            "Choose your financial model template:",
+            options=list(template_options.keys()),
+            format_func=lambda id: template_options[id],
+            index=list(template_options.keys()).index(st.session_state.selected_template_id) if st.session_state.selected_template_id in template_options else 0,
+            key="template_select_dropdown"
+        )
+        st.session_state.selected_template_id = selected_id
+
+
+        if st.session_state.selected_template_id:
+            template_details = ms_logic.get_template_details(st.session_state.selected_template_id)
+            if template_details:
+                st.subheader(f"Details for: {template_details['name']}")
+                st.markdown(f"**Description:** {template_details['description']}")
+                st.markdown("**Standard Components:**")
+                for comp in template_details.get("components", []):
+                    st.markdown(f"- {comp}")
+                st.markdown("**Default KPIs:**")
+                for kpi in template_details.get("default_kpis", []):
+                    st.markdown(f"- {kpi}")
+
+                if st.button("Confirm Model Structure", key="confirm_model_structure_btn"):
+                    # Store the final structure based on the selected template's details
+                    # And potentially merge with AI's suggested KPIs if they are more specific
+                    final_struct = {
+                        "template_id": st.session_state.selected_template_id,
+                        "template_name": template_details["name"],
+                        "components": template_details.get("components", []),
+                        "kpis": template_details.get("default_kpis", [])
+                    }
+                    # If AI suggested KPIs and they are different, consider adding them or letting user choose
+                    ai_suggested_kpis = st.session_state.model_structure_suggestion.get("suggested_kpis", [])
+                    if ai_suggested_kpis and set(ai_suggested_kpis) != set(final_struct["kpis"]):
+                        # Simple merge: add AI KPIs if not already present
+                        for kpi in ai_suggested_kpis:
+                            if kpi not in final_struct["kpis"]:
+                                final_struct["kpis"].append(kpi)
+                        # Could add a note here that KPIs were merged/updated from AI suggestion
+                    
+                    st.session_state.final_model_structure = final_struct
+                    st.success(f"Model structure confirmed using '{template_details['name']}' template.")
+                    st.json(st.session_state.final_model_structure) # Display the final structure
+                    st.markdown("---")
+
+
 # --- Sidebar Elements ---
-# Scenario Analysis Slider (always visible)
-st.sidebar.subheader("Scenario Analysis")
-st.session_state.fm_scenario_revenue_sensitivity = st.sidebar.slider(
-    "Revenue Sensitivity (+/- %)", 
-    min_value=-50, max_value=50,
-    value=st.session_state.fm_scenario_revenue_sensitivity, 
-    step=1, format="%d%%",
-    key="fm_rev_sensitivity_slider"
+st.sidebar.subheader("Model Actions")
+
+# Save Assumptions
+if 'fm_inputs' in st.session_state:
+    try:
+        assumptions_yaml_str = dump_yaml_util(st.session_state.fm_inputs)
+        st.sidebar.download_button(
+            label="Save Assumptions (YAML)",
+            data=assumptions_yaml_str,
+            file_name="financial_model_assumptions.yaml",
+            mime="application/x-yaml",
+            key="fm_download_assumptions_yaml"
+        )
+    except Exception as e:
+        st.sidebar.error(f"Error preparing assumptions for download: {e}")
+
+# Load Assumptions
+uploaded_assumptions_file = st.sidebar.file_uploader(
+    "Load Assumptions (YAML)", 
+    type=["yaml", "yml"],
+    key="fm_upload_assumptions_yaml"
 )
 
-# --- INPUTS WIZARD ---
-st.subheader("Key Assumptions (3-Year Projection)")
+if uploaded_assumptions_file is not None:
+    try:
+        bytes_data = uploaded_assumptions_file.getvalue()
+        yaml_str_content = bytes_data.decode('utf-8')
+        loaded_assumptions = load_yaml_util(yaml_str_content)
 
-# Attempt to pre-fill from global_startup_profile if available and if inputs haven't been set by user yet
+        if loaded_assumptions and isinstance(loaded_assumptions, dict):
+            # Validate loaded assumptions against expected keys (optional but good practice)
+            # For now, directly update fm_inputs
+            st.session_state.fm_inputs = loaded_assumptions
+            
+            # IMPORTANT: Update individual display keys for percentages and form inputs
+            # This ensures the UI reflects the loaded data correctly.
+            for main_key, widget_key_prefix in PERCENTAGE_KEYS_INFO.items():
+                slider_display_key = f"{widget_key_prefix}_slider_display"
+                text_display_key = f"{widget_key_prefix}_text_display"
+                if main_key in loaded_assumptions:
+                    st.session_state[slider_display_key] = loaded_assumptions[main_key] * 100
+                    st.session_state[text_display_key] = loaded_assumptions[main_key] * 100
+            
+            # For non-percentage inputs that are part of the form, fm_inputs is the source of truth.
+            # We might need to trigger a rerun or ensure form defaults pick up new fm_inputs values.
+            # For inputs outside the form but directly using fm_inputs (like the guidance display), they should update.
+            
+            st.sidebar.success("Assumptions loaded successfully!")
+            st.rerun() # Rerun to reflect loaded values in all widgets
+        elif loaded_assumptions is None and yaml_str_content.strip() == "":
+            st.sidebar.warning("Uploaded assumptions file is empty.")
+        else:
+            st.sidebar.error("Failed to parse YAML or invalid assumptions structure.")
+            if loaded_assumptions is not None: # It parsed but wasn't a dict
+                 st.sidebar.info(f"Loaded data type: {type(loaded_assumptions)}")
+
+
+    except Exception as e:
+        st.sidebar.error(f"Error loading assumptions: {e}")
+    finally:
+        # Reset the uploader to allow re-uploading the same file if needed after an error
+        # This can be tricky with Streamlit's default file_uploader behavior.
+        # A common workaround is to change its key, but that's complex here.
+        # For now, user might need to upload a different file or refresh if error.
+        pass
+
+
+st.sidebar.divider()
+st.sidebar.subheader("Scenario Analysis")
+# Existing Revenue Sensitivity Slider
+st.session_state.fm_scenario_revenue_sensitivity = st.sidebar.slider(
+    "Revenue Sensitivity (+/- %)",
+    min_value=-50, max_value=50,
+    value=st.session_state.fm_scenario_revenue_sensitivity,
+    step=1, format="%d%%",
+    key="fm_rev_sensitivity_slider",
+    help="Adjust overall Year 1 Revenue to see its impact on projections. This is a simple sensitivity test."
+)
+
+# AI Suggestions for Scenario Variables
+st.sidebar.markdown("---")
+st.sidebar.markdown("**AI Guidance for Scenarios:**")
+if st.sidebar.button("Suggest Key Variables for Scenarios", key="suggest_scenario_vars_btn"):
+    if st.session_state.get("business_assumptions") and \
+       st.session_state.get("final_model_structure") and \
+       st.session_state.get("fm_inputs"):
+        with st.spinner("AI is thinking of impactful variables..."):
+            try:
+                suggestions = sae.suggest_scenario_variables(
+                    business_assumptions=st.session_state.business_assumptions,
+                    model_structure=st.session_state.final_model_structure,
+                    financial_assumptions=st.session_state.fm_inputs
+                )
+                st.session_state.scenario_variable_suggestions = suggestions
+            except Exception as e:
+                st.sidebar.error(f"Error getting suggestions: {e}")
+                st.session_state.scenario_variable_suggestions = ["Failed to get suggestions."]
+    else:
+        st.sidebar.warning("Please complete Steps 1, 2, and input initial assumptions in Step 3 first.")
+
+if st.session_state.get("scenario_variable_suggestions"):
+    st.sidebar.markdown("**Consider testing scenarios with:**")
+    for suggestion in st.session_state.scenario_variable_suggestions:
+        st.sidebar.caption(f"- {suggestion}")
+st.sidebar.markdown("_(Note: The slider above only tests Year 1 Revenue. For other variables, you'd currently need to adjust them in Step 3 and regenerate.)_")
+
+
+# --- INPUTS WIZARD (Now part of Step 3) ---
+# This section will be wrapped by "Step 3" expander logic further down.
+
+# The actual input fields will be defined within the "Step 3" expander,
+# which only appears if st.session_state.final_model_structure is set.
+
+# Placeholder for where the main financial inputs form will be defined.
+# The existing st.subheader("Key Assumptions (3-Year Projection)") and subsequent form
+# will be moved/nested under the Step 3 expander.
+
+
+# --- Step 3: Input Financial Assumptions with AI Guidance ---
+if st.session_state.get("final_model_structure"):
+    with st.expander("Step 3: Input Financial Assumptions 📊", expanded=True):
+        st.markdown("Now, let's input the core financial numbers for your model. AI can provide guidance and benchmarks for key assumptions.")
+        st.markdown(f"You've selected the **'{st.session_state.final_model_structure['template_name']}'** model structure.")
+        st.markdown(f"Key components to consider: {', '.join(st.session_state.final_model_structure['components'])}")
+        st.markdown(f"Key KPIs to track: {', '.join(st.session_state.final_model_structure['kpis'])}")
+        st.markdown("---")
+
+        # The existing input form and logic will be placed here.
+        # For now, let's ensure the structure is correct.
+        # The original "Key Assumptions (3-Year Projection)" subheader and form will go here.
+
+        # --- Original Input Form Starts Here (Moved into Step 3) ---
+        st.subheader("Key Assumptions (3-Year Projection)")
+
+        # Attempt to pre-fill from global_startup_profile if available and if inputs haven't been set by user yet
 # This is a simple pre-fill, more sophisticated logic might be needed for specific fields
 if 'global_startup_profile' in st.session_state and st.session_state.global_startup_profile:
     profile = st.session_state.global_startup_profile
@@ -191,17 +626,44 @@ with interactive_cols[0]: # Revenue Growth Rates
 
 with interactive_cols[1]: # Costs & Expenses Percentages
     st.write("COGS (% of Revenue)")
-    cogs_cols = st.columns([3,1])
-    with cogs_cols[0]:
-        st.slider("COGS Slider", min_value=0.0, max_value=100.0, step=1.0, format="%.0f%%",
-                  key=f"{PERCENTAGE_KEYS_INFO['cogs_percent']}_slider_display", 
-                  on_change=sync_cogs_slider,
-                  help="Cost of Goods Sold as a percentage of total revenue.", label_visibility="collapsed")
-    with cogs_cols[1]:
-        st.number_input("COGS Text", min_value=0.0, max_value=100.0, step=0.1, format="%.1f",
-                        key=f"{PERCENTAGE_KEYS_INFO['cogs_percent']}_text_display", 
-                        on_change=sync_cogs_text,
-                        label_visibility="collapsed")
+    field_key_cogs = "cogs_percent"
+    # Layout: Slider and Text Input in one row, AI tip button and guidance in the next.
+    cogs_input_cols = st.columns([3, 1]) # For slider and text input
+    with cogs_input_cols[0]:
+        st.slider(
+            "COGS Slider", min_value=0.0, max_value=100.0, step=1.0, format="%.0f%%",
+            key=f"{PERCENTAGE_KEYS_INFO[field_key_cogs]}_slider_display",
+            on_change=sync_cogs_slider,
+            help="Cost of Goods Sold as a percentage of total revenue.", label_visibility="collapsed"
+        )
+    with cogs_input_cols[1]:
+        st.number_input(
+            "COGS Text", min_value=0.0, max_value=100.0, step=0.1, format="%.1f",
+            key=f"{PERCENTAGE_KEYS_INFO[field_key_cogs]}_text_display",
+            on_change=sync_cogs_text,
+            label_visibility="collapsed"
+        )
+    
+    # AI Tip button and guidance display for COGS
+    if st.button("💡 AI Tip", key=f"guidance_btn_{field_key_cogs}", help="Get AI guidance for COGS %."):
+        if st.session_state.business_assumptions and st.session_state.final_model_structure:
+            with st.spinner("Fetching AI guidance..."):
+                # For percentage inputs, the value in fm_inputs is 0.0-1.0, but display is 0-100.
+                # The LLM prompt expects the value as the user sees it (0-100).
+                current_cogs_display_val = st.session_state.get(f"{PERCENTAGE_KEYS_INFO[field_key_cogs]}_text_display", DEFAULT_COGS_PERCENT * 100)
+                guidance = ae.get_guidance_for_assumption_field(
+                    assumption_field_key=field_key_cogs,
+                    current_value=f"{current_cogs_display_val}%", # Pass as percentage string
+                    business_assumptions=st.session_state.business_assumptions,
+                    model_structure=st.session_state.final_model_structure
+                )
+                st.session_state.assumption_guidance_texts[field_key_cogs] = guidance
+        else:
+            st.session_state.assumption_guidance_texts[field_key_cogs] = "Please complete Step 1 & 2 for contextual guidance."
+    
+    if st.session_state.assumption_guidance_texts.get(field_key_cogs):
+        st.caption(f"💡 {st.session_state.assumption_guidance_texts[field_key_cogs]}")
+
 
     st.write("Year 2 OpEx Growth")
     opex_g2_cols = st.columns([3,1])
@@ -245,20 +707,86 @@ with interactive_cols[2]: # Other Percentages
 
 st.divider() # Separator before the form
 
+# --- AI Guidance for Form Inputs (Displayed outside form) ---
+st.markdown("#### AI Guidance for Key Values")
+
+# Guidance for Year 1 Revenue
+field_key_rev_y1 = "revenue_y1"
+current_rev_y1_val_for_tip = st.session_state.fm_inputs.get(field_key_rev_y1, DEFAULT_REVENUE_Y1)
+# Display label for context, as the input itself is inside the form
+st.markdown(f"**Year 1 Revenue ($)**: Guidance for the value currently set at `${current_rev_y1_val_for_tip:,.0f}`")
+if st.button("💡 AI Tip", key=f"guidance_btn_{field_key_rev_y1}_outside_form", help="Get AI guidance for Year 1 Revenue."):
+    if st.session_state.business_assumptions and st.session_state.final_model_structure:
+        with st.spinner("Fetching AI guidance..."):
+            guidance = ae.get_guidance_for_assumption_field(
+                assumption_field_key=field_key_rev_y1,
+                current_value=current_rev_y1_val_for_tip, 
+                business_assumptions=st.session_state.business_assumptions,
+                model_structure=st.session_state.final_model_structure
+            )
+            st.session_state.assumption_guidance_texts[field_key_rev_y1] = guidance
+    else:
+        st.session_state.assumption_guidance_texts[field_key_rev_y1] = "Please complete Step 1 & 2 for contextual guidance."
+
+if st.session_state.assumption_guidance_texts.get(field_key_rev_y1):
+    st.caption(f"💡 {st.session_state.assumption_guidance_texts[field_key_rev_y1]}")
+
+# Guidance for Year 1 Operating Expenses
+field_key_opex_y1 = "opex_y1"
+current_opex_y1_val_for_tip = st.session_state.fm_inputs.get(field_key_opex_y1, DEFAULT_OPEX_Y1)
+st.markdown(f"**Year 1 Operating Expenses ($)**: Guidance for the value currently set at `${current_opex_y1_val_for_tip:,.0f}`")
+if st.button("💡 AI Tip", key=f"guidance_btn_{field_key_opex_y1}_outside_form", help="Get AI guidance for Year 1 OpEx."):
+    if st.session_state.business_assumptions and st.session_state.final_model_structure:
+        with st.spinner("Fetching AI guidance..."):
+            guidance = ae.get_guidance_for_assumption_field(
+                assumption_field_key=field_key_opex_y1,
+                current_value=current_opex_y1_val_for_tip,
+                business_assumptions=st.session_state.business_assumptions,
+                model_structure=st.session_state.final_model_structure
+            )
+            st.session_state.assumption_guidance_texts[field_key_opex_y1] = guidance
+    else:
+        st.session_state.assumption_guidance_texts[field_key_opex_y1] = "Please complete Step 1 & 2 for contextual guidance."
+
+if st.session_state.assumption_guidance_texts.get(field_key_opex_y1):
+    st.caption(f"💡 {st.session_state.assumption_guidance_texts[field_key_opex_y1]}")
+
+st.divider() # Visually separate this guidance section from the form below
+
 # Use a form for remaining inputs to prevent reruns on each widget change until submission
 with st.form(key="financial_assumptions_form"):
     st.subheader("Core Financial Values & Other Assumptions") # Changed subheader
     # Group inputs for better layout
     form_input_cols = st.columns(3) # Renamed to avoid conflict
     with form_input_cols[0]: # Was input_cols[0]
-        st.subheader("Revenue") # This subheader might be redundant if one is above for the whole section
-        st.session_state.fm_inputs["revenue_y1"] = st.number_input("Year 1 Revenue ($)", min_value=0, value=st.session_state.fm_inputs.get("revenue_y1", DEFAULT_REVENUE_Y1), step=1000, key="fm_rev_y1_form", help="Projected total revenue for the first full year of operation.")
+        st.subheader("Revenue")
+        field_key_rev_y1 = "revenue_y1"
+        current_rev_y1_val = st.session_state.fm_inputs.get(field_key_rev_y1, DEFAULT_REVENUE_Y1)
+        st.session_state.fm_inputs[field_key_rev_y1] = st.number_input(
+            "Year 1 Revenue ($)", 
+            min_value=0, 
+            value=current_rev_y1_val, 
+            step=1000, 
+            key="fm_rev_y1_form", 
+            help="Projected total revenue for the first full year of operation."
+        )
+        # AI Tip button and caption for revenue_y1 are now outside the form
         # Percentage inputs for revenue growth are now outside the form
 
     with form_input_cols[1]: # Was input_cols[1]
-        st.subheader("Costs & Expenses") # Redundant?
+        st.subheader("Costs & Expenses")
         # COGS % is now outside the form
-        st.session_state.fm_inputs["opex_y1"] = st.number_input("Year 1 Operating Expenses ($)", min_value=0, value=st.session_state.fm_inputs.get("opex_y1", DEFAULT_OPEX_Y1), step=1000, key="fm_opex_y1_form", help="Total operating expenses (e.g., salaries, rent, marketing) for Year 1, excluding COGS.")
+        field_key_opex_y1 = "opex_y1"
+        current_opex_y1_val = st.session_state.fm_inputs.get(field_key_opex_y1, DEFAULT_OPEX_Y1)
+        st.session_state.fm_inputs[field_key_opex_y1] = st.number_input(
+            "Year 1 Operating Expenses ($)", 
+            min_value=0, 
+            value=current_opex_y1_val, 
+            step=1000, 
+            key="fm_opex_y1_form", 
+            help="Total operating expenses (e.g., salaries, rent, marketing) for Year 1, excluding COGS."
+        )
+        # AI Tip button and caption for opex_y1 are now outside the form
         # OpEx growth percentages are now outside the form
 
     with form_input_cols[2]: # Was input_cols[2]
@@ -289,6 +817,8 @@ with st.form(key="financial_assumptions_form"):
 
     submitted_assumptions = st.form_submit_button("Generate Financial Statements", help="Click to generate P&L, Cash Flow, and Balance Sheet based on your inputs.")
 
+# Initialize should_generate to False before the main conditional block
+should_generate = False
 
 if submitted_assumptions:
     # Update fm_inputs from the text_display fields before calculation
@@ -303,19 +833,195 @@ if submitted_assumptions:
     #     if text_display_key in st.session_state and slider_display_key in st.session_state:
     #          st.session_state[slider_display_key] = st.session_state[text_display_key]
 
+    # --- AI Review of Assumptions (before generation) ---
+    if st.session_state.get("business_assumptions") and \
+       st.session_state.get("final_model_structure") and \
+       st.session_state.fm_inputs: # fm_inputs should be populated by the form submission
 
-    with st.spinner("Generating financial statements..."):
-        try:
-            # Use the actual logic now
-            statements = financial_model_logic.generate_financial_statements(st.session_state.fm_inputs)
-            st.session_state.fm_financial_statements = statements
-            st.success("Financial statements generated!")
-        except Exception as e:
-            st.error(f"An error occurred during financial statement generation: {e}")
-            st.session_state.fm_financial_statements = None
+        with st.spinner("AI is reviewing your assumptions..."):
+            try:
+                review_feedback = ae.review_all_assumptions(
+                    financial_assumptions=st.session_state.fm_inputs,
+                    business_assumptions=st.session_state.business_assumptions,
+                    model_structure=st.session_state.final_model_structure
+                )
+                st.session_state.assumption_review_feedback = review_feedback
+            except Exception as e:
+                st.error(f"Error during AI assumption review: {e}")
+                st.session_state.assumption_review_feedback = "Review failed."
+
+    if st.session_state.assumption_review_feedback:
+        st.info("AI Review of Your Assumptions:")
+        st.markdown(st.session_state.assumption_review_feedback)
+        
+        review_cols = st.columns(2)
+        with review_cols[0]:
+            if st.button("Proceed to Generate Statements Anyway", key="proceed_generation_btn"):
+                st.session_state.proceed_after_review = True
+                st.session_state.assumption_review_feedback = None # Clear feedback to avoid re-showing
+                st.rerun() # Rerun to trigger generation
+        with review_cols[1]:
+            st.write("Or, revise your inputs above and click 'Generate Financial Statements' again.")
+            
+    # --- Actual Financial Statement Generation ---
+    # Only generate if submitted, and ( (no review was done/needed) OR (user chose to proceed after review) )
+    should_generate = submitted_assumptions and \
+                      (not st.session_state.assumption_review_feedback or st.session_state.proceed_after_review)
+
+    if should_generate:
+        with st.spinner("Generating financial statements..."):
+            try:
+                statements = financial_model_logic.generate_financial_statements(st.session_state.fm_inputs)
+                st.session_state.fm_financial_statements = statements
+                st.success("Financial statements generated!")
+                st.session_state.proceed_after_review = False # Reset flag
+                st.session_state.assumption_review_feedback = None # Clear feedback
+            except Exception as e:
+                st.error(f"An error occurred during financial statement generation: {e}")
+                st.session_state.fm_financial_statements = None
+                st.session_state.proceed_after_review = False # Reset flag
+
 
 # --- DISPLAY RESULTS ---
-if st.session_state.get('fm_financial_statements'):
+# Now 'should_generate' is defined regardless of whether 'submitted_assumptions' was true,
+# but its value correctly reflects if generation should have occurred.
+if st.session_state.get('fm_financial_statements') and should_generate:
+    # --- Step 4: Understand Formulas & Model Logic (Contextual to generated statements) ---
+    # This section appears after statements are generated, allowing users to explore concepts.
+    with st.expander("Step 4: Understand Formulas & Model Logic 🧠", expanded=True): # Expanded True for visibility
+        st.markdown("Explore common financial concepts or how statements connect.")
+
+        # Explanation for Financial Statement Interdependencies
+        if st.button("Explain Financial Statement Connections", key="explain_interdependencies_btn"):
+            with st.spinner("AI is preparing an explanation..."):
+                explanation = fle.explain_statement_interdependencies(
+                    business_assumptions=st.session_state.get("business_assumptions")
+                )
+                st.session_state.interdependency_explanation_output = explanation
+        
+        if st.session_state.interdependency_explanation_output:
+            st.subheader("How Financial Statements Connect:")
+            st.markdown(st.session_state.interdependency_explanation_output)
+            st.markdown("---")
+
+        # Explanation for a specific formula/concept
+        st.session_state.formula_explanation_topic = st.text_input(
+            "Enter a financial formula or concept to explain (e.g., EBITDA, NPV, Working Capital):",
+            value=st.session_state.formula_explanation_topic,
+            key="formula_topic_input"
+        )
+        if st.button("Explain Concept", key="explain_concept_btn"):
+            if st.session_state.formula_explanation_topic:
+                if st.session_state.business_assumptions and st.session_state.final_model_structure:
+                    with st.spinner(f"AI is explaining '{st.session_state.formula_explanation_topic}'..."):
+                        explanation = fle.explain_formula_or_concept(
+                            formula_or_concept=st.session_state.formula_explanation_topic,
+                            business_assumptions=st.session_state.business_assumptions,
+                            model_structure=st.session_state.final_model_structure,
+                            financial_assumptions=st.session_state.fm_inputs # Provide current inputs for context
+                        )
+                        st.session_state.formula_explanation_output = explanation
+                else:
+                    st.warning("Business context (Step 1) and Model Structure (Step 2) are needed for tailored explanations.")
+            else:
+                st.warning("Please enter a formula or concept to explain.")
+
+        if st.session_state.formula_explanation_output:
+            st.subheader(f"Explanation for: {st.session_state.formula_explanation_topic}")
+            st.markdown(st.session_state.formula_explanation_output)
+            # Clear after showing or keep until new topic? For now, keep.
+            # To clear: st.session_state.formula_explanation_output = None 
+            # st.session_state.formula_explanation_topic = ""
+        st.markdown("---")
+
+
+    # --- Step 5: AI Model Validation (Contextual to generated statements) ---
+    with st.expander("Step 5: AI Model Validation & Review ✅", expanded=True):
+        st.markdown("Get an AI-powered review of your generated model for overall reasonableness and potential insights.")
+        if st.button("Get AI Reasonableness Review", key="ai_reasonableness_review_btn"):
+            if st.session_state.get("business_assumptions") and \
+               st.session_state.get("final_model_structure") and \
+               st.session_state.get("fm_inputs") and \
+               st.session_state.get("fm_financial_statements"):
+                with st.spinner("AI is reviewing your financial model..."):
+                    try:
+                        feedback = mve.review_model_reasonableness(
+                            business_assumptions=st.session_state.business_assumptions,
+                            model_structure=st.session_state.final_model_structure,
+                            financial_assumptions=st.session_state.fm_inputs,
+                            generated_statements=st.session_state.fm_financial_statements
+                        )
+                        st.session_state.model_reasonableness_feedback = feedback
+                    except Exception as e:
+                        st.error(f"Error during AI model review: {e}")
+                        st.session_state.model_reasonableness_feedback = "Failed to get review."
+            else:
+                st.warning("Ensure business context, model structure, financial inputs, and generated statements are available for a comprehensive review.")
+
+        if st.session_state.model_reasonableness_feedback:
+            st.subheader("AI Model Reasonableness Review:")
+            st.markdown(st.session_state.model_reasonableness_feedback)
+            st.markdown("---")
+    
+    # --- Step 6: Interpretation & Presentation Aids ---
+    with st.expander("Step 6: Interpret Your Model with AI 🔍", expanded=True):
+        st.markdown("Understand your Key Performance Indicators (KPIs) and get an AI-generated summary of your model.")
+
+        # KPI Explanation
+        if st.session_state.final_model_structure and st.session_state.final_model_structure.get("kpis"):
+            kpi_options = st.session_state.final_model_structure["kpis"]
+            st.session_state.kpi_to_explain = st.selectbox(
+                "Select a KPI to understand:",
+                options=kpi_options,
+                index=kpi_options.index(st.session_state.kpi_to_explain) if st.session_state.kpi_to_explain in kpi_options else 0,
+                key="kpi_select_for_explanation"
+            )
+            if st.button("Explain KPI", key="explain_kpi_btn"):
+                if st.session_state.kpi_to_explain and \
+                   st.session_state.business_assumptions and \
+                   st.session_state.final_model_structure:
+                    with st.spinner(f"AI is explaining '{st.session_state.kpi_to_explain}'..."):
+                        # KPI value could be fetched from statements if calculated, for now passing N/A
+                        explanation = ie.explain_kpi(
+                            kpi_name=st.session_state.kpi_to_explain,
+                            business_assumptions=st.session_state.business_assumptions,
+                            model_structure=st.session_state.final_model_structure,
+                            kpi_value="N/A" # Placeholder - enhance later to pass actual value
+                        )
+                        st.session_state.kpi_explanation_output = explanation
+                else:
+                    st.warning("Ensure business context and model structure are defined for KPI explanation.")
+            
+            if st.session_state.kpi_explanation_output and st.session_state.kpi_to_explain:
+                st.subheader(f"AI Explanation for: {st.session_state.kpi_to_explain}")
+                st.markdown(st.session_state.kpi_explanation_output)
+                st.markdown("---")
+        else:
+            st.caption("KPIs will be available for explanation once the model structure is confirmed (Step 2).")
+
+        # Financial Summary Narrative
+        if st.button("Generate Financial Summary Narrative", key="generate_narrative_btn"):
+            if st.session_state.business_assumptions and \
+               st.session_state.final_model_structure and \
+               st.session_state.fm_inputs and \
+               st.session_state.fm_financial_statements:
+                with st.spinner("AI is crafting your financial summary..."):
+                    narrative = ie.generate_financial_summary_narrative(
+                        business_assumptions=st.session_state.business_assumptions,
+                        model_structure=st.session_state.final_model_structure,
+                        financial_assumptions=st.session_state.fm_inputs,
+                        generated_statements=st.session_state.fm_financial_statements
+                    )
+                    st.session_state.financial_summary_narrative = narrative
+            else:
+                st.warning("Full context (Steps 1-3 & generated statements) needed for summary narrative.")
+
+        if st.session_state.financial_summary_narrative:
+            st.subheader("AI-Generated Financial Summary Narrative:")
+            st.markdown(st.session_state.financial_summary_narrative)
+            st.markdown("---")
+
+
     statements = st.session_state.fm_financial_statements
     
     # Card for P&L
