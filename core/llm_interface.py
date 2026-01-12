@@ -12,7 +12,7 @@ from langchain_community.chat_models import ChatOllama # Or from langchain.chat_
 # For OpenRouter, it might use ChatOpenAI with a custom base URL or a dedicated class if available
 # from langchain_community.chat_models import ChatOpenRouter
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
-from langchain.chains.llm import LLMChain
+from langchain_core.output_parsers import StrOutputParser
 from .yaml_utils import load_yaml, dump_yaml, extract_yaml_from_text, create_default_investor_yaml
 
 # core/llm_interface.py (continued)
@@ -288,7 +288,7 @@ def get_llm_response(prompt_template_str: str,
                         **llm_kwargs):
     """
     Creates a Langchain prompt template, initializes the LLM,
-    forms a chain, and runs it to get the response.
+    forms a chain using LCEL, and runs it to get the response.
     """
     llm = get_llm(provider_name=llm_provider, model_name=llm_model, **llm_kwargs)
 
@@ -304,24 +304,21 @@ def get_llm_response(prompt_template_str: str,
     else: # basic LLM
         prompt = PromptTemplate.from_template(template=prompt_template_str)
 
-    chain = LLMChain(llm=llm, prompt=prompt)
-    # Langchain's .run() method can take a dictionary of variables or keyword arguments
-    # Ensure input_variables matches the placeholders in prompt_template_str
-    try: # Outer try for the whole process after chain initialization
-        # The PromptTemplate itself will validate if all necessary input_variables are present
-        # when the chain is run. The previous custom key checking logic was problematic.
-        try:
-            response = chain.run(input_variables)
-            return response
-        except KeyError as ke: # Specifically catch KeyError for missing keys in the prompt
-            st.error(f"Missing key in prompt variables for {llm_provider}/{llm.model_name if hasattr(llm, 'model_name') else 'unknown model'}: {ke}")
-            return f"Error: Missing key {ke} required by the prompt."
-        except Exception as e_chain: # More general exception for other chain run issues
-            st.error(f"Error during LLM chain execution with {llm_provider}/{llm.model_name if hasattr(llm, 'model_name') else 'unknown model'}: {e_chain}")
-            return f"Error processing LLM request during chain execution: {e_chain}"
-    except Exception as e_outer: # Catch errors in the key preparation or other logic
-        st.error(f"Outer error in get_llm_response before chain execution: {e_outer}")
-        return f"Error preparing LLM request: {e_outer}"
+    # Use LCEL (LangChain Expression Language) - modern approach
+    # Chain components using the pipe operator: prompt | llm | output_parser
+    output_parser = StrOutputParser()
+    chain = prompt | llm | output_parser
+    
+    try:
+        # LCEL chains use .invoke() instead of .run()
+        response = chain.invoke(input_variables)
+        return response
+    except KeyError as ke: # Specifically catch KeyError for missing keys in the prompt
+        st.error(f"Missing key in prompt variables for {llm_provider}/{llm.model_name if hasattr(llm, 'model_name') else 'unknown model'}: {ke}")
+        return f"Error: Missing key {ke} required by the prompt."
+    except Exception as e_chain: # More general exception for other chain run issues
+        st.error(f"Error during LLM chain execution with {llm_provider}/{llm.model_name if hasattr(llm, 'model_name') else 'unknown model'}: {e_chain}")
+        return f"Error processing LLM request during chain execution: {e_chain}"
 
 class LLMInterface:
     """
