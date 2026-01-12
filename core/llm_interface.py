@@ -11,8 +11,8 @@ from langchain_groq import ChatGroq
 from langchain_community.chat_models import ChatOllama # Or from langchain.chat_models
 # For OpenRouter, it might use ChatOpenAI with a custom base URL or a dedicated class if available
 # from langchain_community.chat_models import ChatOpenRouter
-from langchain.prompts import PromptTemplate, ChatPromptTemplate
-from langchain.chains import LLMChain
+from langchain_core.prompts import PromptTemplate, ChatPromptTemplate
+from langchain.chains.llm import LLMChain
 from .yaml_utils import load_yaml, dump_yaml, extract_yaml_from_text, create_default_investor_yaml
 
 # core/llm_interface.py (continued)

@@ -3,6 +3,7 @@ streamlit
 
 # LLM Interaction & Orchestration
 langchain
+langchain-core # Core components like prompts and chains
 langchain-openai
 langchain-anthropic
 langchain-google-genai # For Gemini models
