@@ -34,7 +34,7 @@ Ensure the output is strictly valid JSON.
 
 **Example Output (Illustrative):**
 ```json
-{
+{{
   "summary": "Focus on early-stage VCs and angel groups in North America specializing in SaaS. Prioritize those with a history of investing in B2B solutions.",
   "keywords_for_search": [
     "early stage SaaS VC North America",
@@ -48,7 +48,7 @@ Ensure the output is strictly valid JSON.
     "Niche SaaS investor databases"
   ],
   "outreach_angle": "Emphasize the strong MVP traction, the clear problem being solved in the B2B space, and the scalable business model. Highlight the team's expertise if relevant."
-}
+}}
 ```
 
 **Begin Strategy Development:**
