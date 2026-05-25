@@ -1,8 +1,5 @@
 from typing import List, Optional
-try:
-    from langchain_core.pydantic_v1 import BaseModel, Field
-except ImportError:
-    from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field
 from langchain_core.output_parsers import JsonOutputParser
 from .llm_interface import get_llm_response
 from prompts import pitch_deck_advisor_prompts
@@ -79,7 +76,7 @@ def get_section_refinement_from_llm(section_name: str, section_text: str, startu
 def extract_structured_data_from_deck_text(full_deck_text: str, provider: str, model: str = None, **kwargs):
     """
     Extracts structured data (company name, industry, stage, USP, etc.) from the pitch deck text using an LLM
-    and Pydantic for robust parsing.
+    and Pydantic for robust parsing. Uses native structured output where possible, with a YAML fallback.
 
     Args:
         full_deck_text (str): The full extracted text from the pitch deck.
@@ -91,35 +88,46 @@ def extract_structured_data_from_deck_text(full_deck_text: str, provider: str, m
         dict: A dictionary containing the extracted structured data.
               Returns None if parsing fails.
     """
-    # Initialize the parser
-    parser = JsonOutputParser(pydantic_object=StartupProfile)
-    
-    # Get format instructions
-    format_instructions = parser.get_format_instructions()
-    
-    # Inject format instructions into the prompt
-    prompt_with_format = pitch_deck_advisor_prompts.PROMPT_EXTRACT_STRUCTURED_DATA + "\n\n" + format_instructions
-
-    prompt_variables = {
-        "full_deck_text": full_deck_text
-    }
+    from langchain_core.prompts import PromptTemplate
+    from langchain_core.output_parsers import YamlOutputParser
+    from .llm_interface import get_llm
 
     # Default to lower temp for Pydantic/JSON
     llm_params = {"temperature": kwargs.get("temperature", 0.1)} 
     llm_params.update(kwargs)
 
+    llm = get_llm(provider_name=provider, model_name=model, **llm_params)
+    if not llm:
+        print(f"Failed to initialize LLM for {provider}")
+        return None
+
+    prompt_variables = {
+        "full_deck_text": full_deck_text
+    }
+
+    # Attempt native structured output first for known good providers
+    if provider.lower() in ["openai", "anthropic", "google", "groq"]:
+        try:
+            structured_llm = llm.with_structured_output(StartupProfile)
+            prompt = PromptTemplate.from_template(pitch_deck_advisor_prompts.PROMPT_EXTRACT_STRUCTURED_DATA)
+            chain = prompt | structured_llm
+            parsed_obj = chain.invoke(prompt_variables)
+            return parsed_obj
+        except Exception as e:
+            print(f"Native structured output failed for {provider}, falling back to YAML: {e}")
+            # Fall through to YAML if native fails
+
+    # Fallback to YamlOutputParser for smaller models / unsupported providers
+    parser = YamlOutputParser(pydantic_object=StartupProfile)
+    format_instructions = parser.get_format_instructions()
+    prompt_with_format = pitch_deck_advisor_prompts.PROMPT_EXTRACT_STRUCTURED_DATA + "\n\n" + format_instructions
+
+    prompt = PromptTemplate.from_template(prompt_with_format)
+    chain = prompt | llm | parser
+
     try:
-        raw_response = get_llm_response(
-            prompt_template_str=prompt_with_format,
-            input_variables=prompt_variables,
-            llm_provider=provider,
-            llm_model=model,
-            **llm_params 
-        )
-        
-        # Pydantic parser can parse the string output from the LLM
-        parsed_obj = parser.parse(raw_response)
+        parsed_obj = chain.invoke(prompt_variables)
         return parsed_obj
     except Exception as e:
-        print(f"Error parsing structured extraction output: {e}")
+        print(f"Error parsing YAML output: {e}")
         return None
