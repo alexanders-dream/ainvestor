@@ -89,7 +89,7 @@ def extract_structured_data_from_deck_text(full_deck_text: str, provider: str, m
               Returns None if parsing fails.
     """
     from langchain_core.prompts import PromptTemplate
-    from langchain.output_parsers import YamlOutputParser
+    from langchain_community.output_parsers import YamlOutputParser
     from .llm_interface import get_llm
 
     # Default to lower temp for Pydantic/JSON
