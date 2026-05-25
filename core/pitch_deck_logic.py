@@ -147,7 +147,7 @@ def extract_structured_data_from_deck_text(full_deck_text: str, provider: str, m
                 pitch_deck_advisor_prompts.PROMPT_EXTRACT_STRUCTURED_DATA
             )
             result = (prompt | structured_llm).invoke(prompt_variables)
-            return result
+            return result.model_dump() if result else None
         except Exception as e:
             print(f"Native structured output failed for {provider}, falling back to YAML: {e}")
 
@@ -163,7 +163,8 @@ def extract_structured_data_from_deck_text(full_deck_text: str, provider: str, m
 
     try:
         raw_text = chain.invoke(prompt_variables)
-        return _parse_yaml_to_model(raw_text, StartupProfile)
+        parsed_model = _parse_yaml_to_model(raw_text, StartupProfile)
+        return parsed_model.model_dump() if parsed_model else None
     except Exception as e:
         print(f"Error parsing YAML fallback output: {e}")
         return None
