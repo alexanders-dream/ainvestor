@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
-from langchain_community.chat_models import ChatOllama # Or from langchain.chat_models
+from langchain_ollama import ChatOllama
 # For OpenRouter, it might use ChatOpenAI with a custom base URL or a dedicated class if available
 # from langchain_community.chat_models import ChatOpenRouter
 from langchain_core.prompts import PromptTemplate, ChatPromptTemplate

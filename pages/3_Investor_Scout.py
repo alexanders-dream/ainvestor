@@ -310,20 +310,22 @@ if combined_results_df is not None and not combined_results_df.empty:
     st.success("Investor Scouting complete!")
     
     if st.button("➡️ Continue to Investor Strategy", key="is_continue_to_strategy"):
-        st.info("Navigate to 'Investor Strategy Agent' from the sidebar or top navigation to continue.")
-        st.session_state.strategy_needs_investor_data = True 
+        st.session_state.strategy_needs_investor_data = True
         if 'selected_investors_df' not in st.session_state or st.session_state.selected_investors_df is None:
-            st.session_state.selected_investors_df = combined_results_df 
+            st.session_state.selected_investors_df = combined_results_df
         elif st.session_state.selected_investors_df is not None: # if it exists, append new results if they are different
             # This simple concat might lead to duplicates if search is run multiple times with overlaps
             # A more robust approach would be to merge and deduplicate based on a unique investor ID or name/website
             st.session_state.selected_investors_df = pd.concat([st.session_state.selected_investors_df, combined_results_df]).drop_duplicates(subset=['name', 'website_url'] if 'name' in combined_results_df.columns and 'website_url' in combined_results_df.columns else ['name'] if 'name' in combined_results_df.columns else None, keep='last').reset_index(drop=True)
+        st.switch_page("pages/4_Investor_Strategy_Agent.py")
 
 
 elif submitted_search and (combined_results_df is None or combined_results_df.empty):
     st.session_state.investor_scout_status = "Completed (No Results)"
     if st.button("➡️ Continue to Investor Strategy (with no matches)", key="is_continue_to_strategy_no_match"):
-        st.info("Navigate to 'Investor Strategy Agent' from the sidebar or top navigation to continue. You can manually input investor details there.")
         st.session_state.strategy_needs_investor_data = False
+        if 'selected_investors_df' in st.session_state:
+            del st.session_state.selected_investors_df
+        st.switch_page("pages/4_Investor_Strategy_Agent.py")
         if 'selected_investors_df' in st.session_state:
             del st.session_state.selected_investors_df

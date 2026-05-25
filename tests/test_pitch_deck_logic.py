@@ -103,3 +103,46 @@ def test_get_section_refinement_from_llm_success(mock_get_llm_response):
 # Example: python -m pytest
 # Or ensure your project structure allows for direct imports (e.g. by having an __init__.py in the root
 # and installing the project in editable mode: pip install -e .)
+
+@patch('core.pitch_deck_logic.get_llm_response')
+def test_extract_structured_data_from_deck_text_success(mock_get_llm_response):
+    """Test successful structured data extraction using Pydantic."""
+    # Mock LLM response as a JSON string, which the Pydantic parser often expects/handles
+    mock_json_response = '''
+    {
+        "company_name": "TechStartup",
+        "industry_sector": "AI",
+        "current_stage": "Seed",
+        "funding_ask_amount": "$1M",
+        "usp": "Revolutionary AI",
+        "keywords_for_investor_search": ["AI", "Tech", "Seed"]
+    }
+    '''
+    mock_get_llm_response.return_value = mock_json_response
+
+    full_deck_text = "We are TechStartup. We do AI."
+    
+    extracted_data = pitch_deck_logic.extract_structured_data_from_deck_text(
+        full_deck_text=full_deck_text,
+        provider="openai",
+        model="gpt-3.5-turbo"
+    )
+
+    assert extracted_data is not None
+    assert extracted_data['company_name'] == "TechStartup"
+    assert extracted_data['industry_sector'] == "AI"
+    assert "AI" in extracted_data['keywords_for_investor_search']
+
+@patch('core.pitch_deck_logic.get_llm_response')
+def test_extract_structured_data_from_deck_text_failure(mock_get_llm_response):
+    """Test extraction failure with invalid JSON."""
+    mock_get_llm_response.return_value = "Not a valid JSON"
+
+    extracted_data = pitch_deck_logic.extract_structured_data_from_deck_text(
+        full_deck_text="Some text",
+        provider="openai"
+    )
+
+    # Depending on how parser handles it, it might raise or return None if we catch it.
+    # In implementation we catch exceptions and return None.
+    assert extracted_data is None

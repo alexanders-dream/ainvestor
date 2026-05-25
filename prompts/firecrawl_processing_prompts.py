@@ -32,67 +32,84 @@ For each identified investor/firm, extract the following information if availabl
 -   `notes`: Any other relevant notes or specific criteria mentioned (e.g., "Minimum investment $100k", "Focus on female founders").
 
 **Output Format:**
-Return the information as a single, valid YAML object. The top-level key MUST be "extracted_profiles", and its value should be a list of YAML objects, where each object represents an extracted investor/firm profile.
+Return the information as a single, valid JSON object. The top-level key MUST be "extracted_profiles", and its value should be a list of JSON objects, where each object represents an extracted investor/firm profile.
 
-IMPORTANT: Your response MUST be a valid YAML object that can be parsed with yaml.safe_load(). Do not include any explanatory text before or after the YAML.
+IMPORTANT: Your response MUST be a valid JSON object. Do not include any explanatory text before or after the JSON.
 
 If no specific investor information can be reliably extracted, return an empty list for "extracted_profiles":
-```yaml
-extracted_profiles: []
+```json
+{
+  "extracted_profiles": []
+}
 ```
 
-**Example YAML Output (if one investor found):**
-```yaml
-extracted_profiles:
-  - name: Future Africa Fund
-    description: Investing in mission-driven founders building the future of Africa.
-    investor_type: VC Firm
-    industry_focus:
-      - Technology
-      - Fintech
-      - Healthcare
-      - Clean Energy
-    stage_focus:
-      - Pre-Seed
-      - Seed
-    geographical_focus:
-      - Africa
-    contact_email: connect@future.africa
-    website_url: https://future.africa
-    key_people:
-      - Iyinoluwa Aboyeji (Founding Partner)
-    portfolio_examples:
-      - Andela
-      - Flutterwave
-    notes: Looking for companies with strong local impact.
+**Example JSON Output (if one investor found):**
+```json
+{
+  "extracted_profiles": [
+    {
+      "name": "Future Africa Fund",
+      "description": "Investing in mission-driven founders building the future of Africa.",
+      "investor_type": "VC Firm",
+      "industry_focus": [
+        "Technology",
+        "Fintech",
+        "Healthcare",
+        "Clean Energy"
+      ],
+      "stage_focus": [
+        "Pre-Seed",
+        "Seed"
+      ],
+      "geographical_focus": [
+        "Africa"
+      ],
+      "contact_email": "connect@future.africa",
+      "website_url": "https://future.africa",
+      "key_people": [
+        "Iyinoluwa Aboyeji (Founding Partner)"
+      ],
+      "portfolio_examples": [
+        "Andela",
+        "Flutterwave"
+      ],
+      "notes": "Looking for companies with strong local impact."
+    }
+  ]
+}
 ```
-**Example YAML Output (if multiple investors on a list page):**
-```yaml
-extracted_profiles:
-  - name: Investor A Capital
-    investor_type: VC Firm
-    industry_focus:
-      - SaaS
-    description: ""
-    stage_focus: []
-    geographical_focus: []
-    contact_email: ""
-    website_url: ""
-    key_people: []
-    portfolio_examples: []
-    notes: ""
-  - name: Angel Group B
-    investor_type: Angel Network
-    geographical_focus:
-      - East Africa
-    industry_focus: []
-    description: ""
-    stage_focus: []
-    contact_email: ""
-    website_url: ""
-    key_people: []
-    portfolio_examples: []
-    notes: ""
+**Example JSON Output (if multiple investors on a list page):**
+```json
+{
+  "extracted_profiles": [
+    {
+      "name": "Investor A Capital",
+      "investor_type": "VC Firm",
+      "industry_focus": ["SaaS"],
+      "description": "",
+      "stage_focus": [],
+      "geographical_focus": [],
+      "contact_email": "",
+      "website_url": "",
+      "key_people": [],
+      "portfolio_examples": [],
+      "notes": ""
+    },
+    {
+      "name": "Angel Group B",
+      "investor_type": "Angel Network",
+      "geographical_focus": ["East Africa"],
+      "industry_focus": [],
+      "description": "",
+      "stage_focus": [],
+      "contact_email": "",
+      "website_url": "",
+      "key_people": [],
+      "portfolio_examples": [],
+      "notes": ""
+    }
+  ]
+}
 ```
 ```
 

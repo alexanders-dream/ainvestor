@@ -195,30 +195,64 @@ with st.expander("1. Define Your Investor Search Strategy", expanded=True):
 
 if st.session_state.isa_strategy_defined and "isa_generated_strategy" in st.session_state:
     strategy = st.session_state.isa_generated_strategy
-    strategy_content = f"""
-    <p><strong>Summary:</strong> {strategy.get('summary', 'Not available.')}</p>
-    <p><strong>Keywords for Search:</strong> {', '.join(strategy.get('keywords_for_search', ['N/A']))}</p>
-    <p><strong>Data Sources:</strong> {', '.join(strategy.get('data_sources_to_check', ['N/A']))}</p>
-    <p><strong>Outreach Angle:</strong> {strategy.get('outreach_angle', 'Not available.')}</p>
-    """
-    styled_card(
-        title="Generated Investor Strategy",
-        content=strategy_content,
-        icon="🎯"
-    )
+    
+    # Display Summary and Outreach Angle (Editable Text Areas for refinement)
+    st.subheader("Review & Refine Strategy")
+    
+    col_strat_1, col_strat_2 = st.columns(2)
+    with col_strat_1:
+        st.markdown("**Strategy Summary**")
+        st.info(strategy.get('summary', 'Not available.'))
+    with col_strat_2:
+        new_outreach = st.text_area("Outreach Angle", value=strategy.get('outreach_angle', ''))
+        strategy['outreach_angle'] = new_outreach
+
+    # Editable Keywords and Data Sources
+    col_edit_1, col_edit_2 = st.columns(2)
+    with col_edit_1:
+         st.markdown("**Search Keywords (Editable)**")
+         KEYWORDS_KEY = "isa_editable_keywords"
+         # Initialize session state for data editor if needed, or just use key
+         current_keywords = strategy.get('keywords_for_search', [])
+         if not isinstance(current_keywords, list): current_keywords = []
+         
+         # Using a simple text area for easier list editing by user (lines) or data_editor
+         # Data editor is cleaner for lists
+         df_keywords = pd.DataFrame({"Keywords": current_keywords})
+         edited_df_keywords = st.data_editor(df_keywords, num_rows="dynamic", key="keywords_editor", use_container_width=True)
+         strategy['keywords_for_search'] = edited_df_keywords["Keywords"].tolist() # Update strategy
+
+    with col_edit_2:
+        st.markdown("**Data Sources (Editable)**")
+        current_sources = strategy.get('data_sources_to_check', [])
+        if not isinstance(current_sources, list): current_sources = []
+        
+        df_sources = pd.DataFrame({"Data Sources": current_sources})
+        edited_df_sources = st.data_editor(df_sources, num_rows="dynamic", key="sources_editor", use_container_width=True)
+        strategy['data_sources_to_check'] = edited_df_sources["Data Sources"].tolist()
+
+    # Update session state
+    st.session_state.isa_generated_strategy = strategy
 
     # --- 2. Execute Strategy ---
     st.header("2. Execute Strategy & Find Investors")
-    if st.button("🚀 Execute Strategy", type="primary", disabled=not st.session_state.isa_strategy_defined, help="Click to execute the AI-generated strategy and search for investors online (requires Firecrawl & LLM)."):
-        with st.spinner("AI is searching for investors based on the strategy... This may take a few minutes."):
+    
+    # Configuration for execution
+    with st.expander("Search Configuration", expanded=False):
+        max_scrapes = st.slider("Max Search Results to Scrape per Keyword", min_value=1, max_value=5, value=2, help="Higher values check more results but cost more credits and take longer.")
+    
+    if st.button("🚀 Execute Strategy", type="primary", disabled=not st.session_state.isa_strategy_defined, help="Click to execute the strategy using the refined keywords above."):
+        with st.spinner(f"AI is searching for investors (checking top {max_scrapes} results per keyword)..."):
             if not st.session_state.get("global_ai_provider") or not st.session_state.get("global_ai_model"):
                  st.error("Please configure the AI Provider and Model in the sidebar under 'AI Configuration' to use AI for search execution.")
             else:
                 try:
                     st.session_state.isa_execution_results = investor_strategy_logic.execute_investor_search(
                         strategy=st.session_state.isa_generated_strategy,
+                        firecrawl_client=None, # Will be initialized in logic
                         llm_provider=st.session_state.global_ai_provider,
                         llm_model=st.session_state.global_ai_model,
+                        max_scrapes_per_keyword=max_scrapes,
                         temperature=st.session_state.get("global_temperature", 0.3),
                         max_tokens=st.session_state.get("global_max_tokens", 4096),
                         api_key=st.session_state.get("global_api_key") or None,

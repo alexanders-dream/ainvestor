@@ -29,21 +29,26 @@ The strategy should include:
 4.  **Key Outreach Angle/Focus:** A suggestion on what key aspects of the startup to highlight when first reaching out or what makes the startup attractive for the targeted investors.
 
 **Output Format:**
-Provide the strategy as a YAML object with the following keys: "summary", "keywords_for_search" (as a list of strings), "data_sources_to_check" (as a list of strings), and "outreach_angle".
+Provide the strategy as a valid JSON object with the following keys: "summary", "keywords_for_search" (as a list of strings), "data_sources_to_check" (as a list of strings), and "outreach_angle".
+Ensure the output is strictly valid JSON.
 
 **Example Output (Illustrative):**
-```yaml
-summary: Focus on early-stage VCs and angel groups in North America specializing in SaaS. Prioritize those with a history of investing in B2B solutions.
-keywords_for_search:
-  - early stage SaaS VC North America
-  - B2B software angel investors
-  - seed funding enterprise software
-data_sources_to_check:
-  - Crunchbase Pro
-  - AngelList Syndicates
-  - LinkedIn (searching for partners at relevant VC firms)
-  - Niche SaaS investor databases
-outreach_angle: Emphasize the strong MVP traction, the clear problem being solved in the B2B space, and the scalable business model. Highlight the team's expertise if relevant.
+```json
+{
+  "summary": "Focus on early-stage VCs and angel groups in North America specializing in SaaS. Prioritize those with a history of investing in B2B solutions.",
+  "keywords_for_search": [
+    "early stage SaaS VC North America",
+    "B2B software angel investors",
+    "seed funding enterprise software"
+  ],
+  "data_sources_to_check": [
+    "Crunchbase Pro",
+    "AngelList Syndicates",
+    "LinkedIn (searching for partners at relevant VC firms)",
+    "Niche SaaS investor databases"
+  ],
+  "outreach_angle": "Emphasize the strong MVP traction, the clear problem being solved in the B2B space, and the scalable business model. Highlight the team's expertise if relevant."
+}
 ```
 
 **Begin Strategy Development:**

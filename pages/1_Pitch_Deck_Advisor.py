@@ -108,8 +108,8 @@ if st.session_state.get('pda_analysis_results'):
         # For now, just provide the continue button if analysis is ready.
         st.markdown("---")
         if st.button("➡️ Continue to Financial Modeling", key="pda_continue_to_fm_page"):
-            st.info("Navigate to 'Financial Modeling' from the sidebar or top navigation to continue.")
-            st.session_state.fm_needs_pitch_deck_data = True 
+            st.session_state.fm_needs_pitch_deck_data = True
+            st.switch_page("pages/2_Financial_Modeling.py") 
     
 else:
     st.info("No pitch deck analysis found. Please upload and analyze your pitch deck on the main Dashboard.")
